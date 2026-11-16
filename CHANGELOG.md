@@ -16,3 +16,5 @@ All notable changes to this project are recorded here. The format follows
   recordings and a hidden answer key, validated at load (#2).
 - Replay target: answers approved commands from a scenario's recordings, reports commands with
   no recording as such, and truncates long output (#3).
+- Transcript: append-only JSONL record of a drill, written event by event, with a reader that
+  tolerates a line cut off by a crash (#4).
