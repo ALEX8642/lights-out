@@ -14,3 +14,5 @@ All notable changes to this project are recorded here. The format follows
   with a default read-only policy for `linux`, `firewall` and `dns` hosts (#1).
 - Scenario format and loader: a recorded incident as a directory with a briefing, hosts, command
   recordings and a hidden answer key, validated at load (#2).
+- Replay target: answers approved commands from a scenario's recordings, reports commands with
+  no recording as such, and truncates long output (#3).
