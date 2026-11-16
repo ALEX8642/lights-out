@@ -1,0 +1,99 @@
+# Default read-only policy.
+#
+# [roles.<role>.programs.<program>]
+# forms = [[<pattern>, ...], ...]
+#
+# A command is allowed only if its program is listed for the host's role and its arguments match
+# one form: same number of arguments, each matching the whole pattern (a regular expression) at
+# its position. Everything else is denied. See docs/adr/0002-policy-grammar.md.
+#
+# Rules for editing this file:
+# - Inspection only. No form may change state on the host.
+# - No form may read a file that can hold credentials.
+# - A pattern for a free value (host name, unit name) must start with a letter or digit, so the
+#   value can never be read as an option.
+# - Bound anything that could run for ever or return an unbounded amount of output.
+
+# ---------------------------------------------------------------------------- linux
+[roles.linux.programs.ip]
+forms = [["addr|route|link|neigh", "show"], ["-br", "addr|link"]]
+
+[roles.linux.programs.ping]
+forms = [["-c", "[1-5]", "[a-z0-9][a-z0-9.-]*"]]
+
+[roles.linux.programs.cat]
+forms = [["/etc/resolv\\.conf|/etc/hosts"]]
+
+[roles.linux.programs.systemctl]
+forms = [["status|is-active|is-enabled", "[a-z0-9][a-z0-9@._-]*"]]
+
+[roles.linux.programs.journalctl]
+forms = [["--no-pager", "-n", "[0-9]{1,3}", "-u", "[a-z0-9][a-z0-9@._-]*"]]
+
+[roles.linux.programs.dig]
+forms = [
+    ["[a-z0-9][a-z0-9.-]*"],
+    ["[a-z0-9][a-z0-9.-]*", "@[a-z0-9][a-z0-9.-]*"],
+    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME"],
+    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME", "@[a-z0-9][a-z0-9.-]*"],
+]
+
+[roles.linux.programs.nslookup]
+forms = [["[a-z0-9][a-z0-9.-]*"], ["[a-z0-9][a-z0-9.-]*", "[a-z0-9][a-z0-9.-]*"]]
+
+[roles.linux.programs.ss]
+forms = [["-tulpn"]]
+
+[roles.linux.programs.uptime]
+forms = [[]]
+
+[roles.linux.programs.df]
+forms = [["-h"]]
+
+# ---------------------------------------------------------------------------- firewall
+# A BSD-based firewall that also runs a local DNS resolver.
+[roles.firewall.programs.pfctl]
+forms = [["-s", "rules|nat|info"]]
+
+[roles.firewall.programs.netstat]
+forms = [["-rn"]]
+
+[roles.firewall.programs.ifconfig]
+forms = [[], ["[a-z][a-z0-9_.]*"]]
+
+[roles.firewall.programs.cat]
+forms = [["/var/unbound/unbound\\.conf|/etc/resolv\\.conf"]]
+
+[roles.firewall.programs.ping]
+forms = [["-c", "[1-5]", "[a-z0-9][a-z0-9.-]*"]]
+
+[roles.firewall.programs.drill]
+forms = [["[a-z0-9][a-z0-9.-]*"], ["[a-z0-9][a-z0-9.-]*", "@[a-z0-9][a-z0-9.-]*"]]
+
+[roles.firewall.programs.uptime]
+forms = [[]]
+
+# ---------------------------------------------------------------------------- dns
+# A Linux host whose job is the network's primary DNS resolver.
+[roles.dns.programs.cat]
+forms = [["/etc/resolv\\.conf|/etc/hosts"]]
+
+[roles.dns.programs.systemctl]
+forms = [["status|is-active|is-enabled", "[a-z0-9][a-z0-9@._-]*"]]
+
+[roles.dns.programs.journalctl]
+forms = [["--no-pager", "-n", "[0-9]{1,3}", "-u", "[a-z0-9][a-z0-9@._-]*"]]
+
+[roles.dns.programs.dig]
+forms = [
+    ["[a-z0-9][a-z0-9.-]*"],
+    ["[a-z0-9][a-z0-9.-]*", "@[a-z0-9][a-z0-9.-]*"],
+    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME"],
+    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME", "@[a-z0-9][a-z0-9.-]*"],
+]
+
+[roles.dns.programs.ss]
+forms = [["-tulpn"]]
+
+[roles.dns.programs.uptime]
+forms = [[]]
