@@ -20,3 +20,5 @@ All notable changes to this project are recorded here. The format follows
   tolerates a line cut off by a crash (#4).
 - Drill loop: a model investigates a scenario through `run` and `report` tools with the command
   policy enforced in between, limits on steps and calls, and a scripted model client (#5).
+- Scoring: a drill is scored from its transcript against the answer key for correctness,
+  supporting facts, evidence gathered, restraint and cost (#6).
