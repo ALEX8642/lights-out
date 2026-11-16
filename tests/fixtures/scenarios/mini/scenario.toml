@@ -1,0 +1,13 @@
+id = "mini"
+title = "Printer name does not resolve"
+briefing = """
+The monitor reports that printer.lan no longer resolves. Find out why.
+"""
+
+[[hosts]]
+name = "mon.lan"
+role = "linux"
+
+[[hosts]]
+name = "gw.lan"
+role = "firewall"
