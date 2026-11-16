@@ -43,7 +43,7 @@ Pre-release. Version 0.1 is in progress; nothing here is usable yet.
 uv sync
 uv run pytest -q
 uv run ruff check . && uv run ruff format --check .
-uv run mypy src scripts
+uv run mypy src scripts tests
 uv run python scripts/check_sanitised.py
 ```
 

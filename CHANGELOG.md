@@ -10,3 +10,5 @@ All notable changes to this project are recorded here. The format follows
 
 - Repository scaffold: CI (lint, format, type check, tests), sanitising check for IPv4
   addresses, contribution workflow and the first decision record.
+- Command policy: deny-by-default check of model-proposed commands against a per-role allowlist,
+  with a default read-only policy for `linux`, `firewall` and `dns` hosts (#1).
