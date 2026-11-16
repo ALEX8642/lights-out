@@ -18,3 +18,5 @@ All notable changes to this project are recorded here. The format follows
   no recording as such, and truncates long output (#3).
 - Transcript: append-only JSONL record of a drill, written event by event, with a reader that
   tolerates a line cut off by a crash (#4).
+- Drill loop: a model investigates a scenario through `run` and `report` tools with the command
+  policy enforced in between, limits on steps and calls, and a scripted model client (#5).
