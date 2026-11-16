@@ -12,3 +12,5 @@ All notable changes to this project are recorded here. The format follows
   addresses, contribution workflow and the first decision record.
 - Command policy: deny-by-default check of model-proposed commands against a per-role allowlist,
   with a default read-only policy for `linux`, `firewall` and `dns` hosts (#1).
+- Scenario format and loader: a recorded incident as a directory with a briefing, hosts, command
+  recordings and a hidden answer key, validated at load (#2).

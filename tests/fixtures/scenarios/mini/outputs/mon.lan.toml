@@ -1,0 +1,11 @@
+[[command]]
+argv = ["dig", "printer.lan", "@10.20.0.1"]
+exit_code = 0
+stdout = """
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4242
+;; ANSWER: 0
+"""
+
+[[command]]
+argv = ["uptime"]
+stdout = " 10:01:02 up 3 days,  1 user,  load average: 0.00, 0.01, 0.05\n"

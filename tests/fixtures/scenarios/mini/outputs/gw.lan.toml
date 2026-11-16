@@ -1,0 +1,7 @@
+[[command]]
+argv = ["cat", "/var/unbound/unbound.conf"]
+exit_code = 0
+stdout = """
+server:
+  interface: 10.20.0.1
+"""
