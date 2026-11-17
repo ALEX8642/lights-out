@@ -22,6 +22,8 @@ from lights_out.targets import Target
 from lights_out.transcript import Transcript
 
 MAX_CALLS_PER_TURN = 8
+INVALID_ARGUMENTS = "__invalid_json__"
+"""Key a model client uses for tool-call arguments it could not decode, so the model is told."""
 
 type Message = Mapping[str, object]
 """A chat message in the OpenAI-compatible shape."""
@@ -237,6 +239,7 @@ def run_drill(
     transcript: Transcript,
     *,
     max_steps: int = 20,
+    meta: Mapping[str, object] | None = None,
 ) -> DrillResult:
     """Let ``model`` investigate ``scenario`` until it reports or a limit stops it.
 
@@ -251,7 +254,7 @@ def run_drill(
     stop: StopReason = "step_budget"
     error: str | None = None
     refused: set[tuple[str, str]] = set()  # (host, command) already denied in this drill
-    transcript.append("start", 0, scenario=scenario.id, max_steps=max_steps)
+    transcript.append("start", 0, scenario=scenario.id, max_steps=max_steps, **dict(meta or {}))
 
     while steps < max_steps and report is None:
         try:
@@ -278,6 +281,8 @@ def run_drill(
                     raise _ToolError(
                         f"too many tool calls in one turn (limit {MAX_CALLS_PER_TURN})"
                     )
+                if INVALID_ARGUMENTS in call.arguments:
+                    raise _ToolError("the arguments are not valid JSON; send a JSON object")
                 if call.name == "run":
                     reply, was_denied = _run(
                         call, scenario, policy, target, transcript, steps, refused

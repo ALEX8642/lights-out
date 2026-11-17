@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from lights_out.agent import (
+    INVALID_ARGUMENTS,
     MAX_CALLS_PER_TURN,
     TOOLS,
     DrillResult,
@@ -261,6 +262,20 @@ def test_malformed_tool_call_is_an_error_reply_and_the_drill_continues(
 def test_unknown_host_error_lists_the_hosts(tmp_path: Path) -> None:
     drill = Drill(tmp_path, [turn(run("ghost.lan", "uptime")), turn(report())])
     assert "mon.lan, gw.lan" in drill.tool_replies()[0]
+
+
+def test_arguments_that_were_not_json_get_an_error_reply(tmp_path: Path) -> None:
+    bad = ToolCall("c1", "run", {INVALID_ARGUMENTS: "{host: mon.lan"})
+    drill = Drill(tmp_path, [turn(bad), turn(report())])
+    assert drill.result.tool_errors == 1
+    assert "not valid JSON" in drill.tool_replies()[0]
+
+
+def test_meta_is_recorded_in_the_start_event(tmp_path: Path) -> None:
+    model = ScriptedModel([turn(report())])
+    path = tmp_path / "t.jsonl"
+    run_drill(MINI, POLICY, ReplayTarget(MINI), model, Transcript(path), meta={"model": "m1"})
+    assert read_transcript(path)[0][0].data == {"scenario": "mini", "max_steps": 20, "model": "m1"}
 
 
 def test_empty_recommendation_is_allowed(tmp_path: Path) -> None:
