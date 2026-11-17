@@ -8,12 +8,14 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from lights_out import __version__
-from lights_out.agent import ScriptedModel, run_drill
+from lights_out.agent import ModelClient, ScriptedModel, run_drill
+from lights_out.endpoint import OpenAIClient
 from lights_out.policy import Allow, Policy, PolicyError
 from lights_out.scenario import ScenarioError, load_scenario
 from lights_out.scoring import Score, score
@@ -51,8 +53,16 @@ def _parser() -> argparse.ArgumentParser:
     drill = commands.add_parser("drill", help="replay a scenario to a model")
     drill.add_argument("scenario", type=Path, help="scenario directory")
     drill.add_argument("--policy", type=Path, default=DEFAULT_POLICY, help="policy file")
+    drill.add_argument("--script", type=Path, help="JSON file of model turns to replay")
     drill.add_argument(
-        "--script", type=Path, required=True, help="JSON file of model turns to replay"
+        "--endpoint", help="OpenAI-compatible base URL, for example http://host:8000/v1"
+    )
+    drill.add_argument("--model", help="model name to request from --endpoint")
+    drill.add_argument(
+        "--api-key-env", metavar="VAR", help="environment variable holding the endpoint's API key"
+    )
+    drill.add_argument(
+        "--temperature", type=float, default=0.0, help="sampling temperature (default 0)"
     )
     drill.add_argument("--out", type=Path, required=True, help="transcript file to write")
     drill.add_argument("--max-steps", type=int, default=20, help="model turns allowed (default 20)")
@@ -76,9 +86,30 @@ def _policy_check(args: argparse.Namespace) -> int:
 
 
 def _drill(args: argparse.Namespace) -> int:
+    if (args.script is None) == (args.endpoint is None):
+        print("lights-out: give exactly one of --script or --endpoint", file=sys.stderr)
+        return 2
+    model: ModelClient
+    meta: dict[str, object]
+    if args.endpoint is not None:
+        if not args.model:
+            print("lights-out: --endpoint needs --model", file=sys.stderr)
+            return 2
+        api_key = None
+        if args.api_key_env:
+            api_key = os.environ.get(args.api_key_env)
+            if not api_key:
+                print(f"lights-out: {args.api_key_env} is not set", file=sys.stderr)
+                return 2
+        model = OpenAIClient(
+            args.endpoint, args.model, api_key=api_key, temperature=args.temperature
+        )
+        meta = {"model": args.model, "endpoint": args.endpoint, "temperature": args.temperature}
+    else:
+        model = ScriptedModel.from_json(args.script)
+        meta = {"model": "scripted", "script": str(args.script)}
     scenario = load_scenario(args.scenario)
     policy = Policy.from_toml(args.policy)
-    model = ScriptedModel.from_json(args.script)
     result = run_drill(
         scenario,
         policy,
@@ -86,6 +117,7 @@ def _drill(args: argparse.Namespace) -> int:
         model,
         Transcript(args.out),
         max_steps=args.max_steps,
+        meta={**meta, "lights_out": __version__},
     )
     print(
         f"stopped: {result.stop_reason} after {result.steps} steps "
