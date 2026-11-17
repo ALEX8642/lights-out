@@ -13,11 +13,14 @@ Find out why local names fail.
 [[hosts]]
 name = "mon.lan"
 role = "linux"
+closed_world = true
 
 [[hosts]]
 name = "dns1.lan"
 role = "dns"
+closed_world = true
 
 [[hosts]]
 name = "gw.lan"
 role = "firewall"
+closed_world = true

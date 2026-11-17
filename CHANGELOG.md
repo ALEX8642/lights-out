@@ -13,6 +13,15 @@ All notable changes to this project are recorded here. The format follows
   as a model error; tool arguments that are not valid JSON get an error reply instead (#24).
 - The transcript's start event records the model, endpoint or script, temperature and the
   lights-out version (#24).
+- Replay matching: a recording also answers equivalent commands (argument order,
+  presentation-only options, defaults, synonyms, combined flags), and hosts marked
+  `closed_world` answer missing files and services as real hosts do and compute `grep`, `head`,
+  `tail`, `wc` and `ls` from recorded files. The transcript records how each answer was
+  matched (#26).
+- Scoring counts a key fact's evidence as run when an equivalent command was run, not only
+  the identical argument list (#26).
+- `dns-secondary-lan`: hosts are closed-world; 20 more recordings for commands a real model
+  tried (#26).
 
 ### Changed
 

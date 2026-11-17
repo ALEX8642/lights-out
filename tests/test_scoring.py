@@ -226,6 +226,17 @@ def test_evidence_must_be_run_on_the_right_host_with_the_same_arguments() -> Non
     assert score(MINI, wrong_args).evidence_run == ()
 
 
+def test_an_equivalent_command_counts_as_running_the_evidence() -> None:
+    # The evidence is "dig printer.lan @10.20.0.1"; the same question in another form counts.
+    events = [usage(1), *ran(1, "mon.lan", "dig @10.20.0.1 printer.lan +short"), report(1)]
+    assert score(MINI, events).evidence_run == ("empty-answer",)
+
+
+def test_a_different_question_does_not_count_as_the_evidence() -> None:
+    events = [usage(1), *ran(1, "mon.lan", "dig @10.20.0.3 printer.lan"), report(1)]
+    assert score(MINI, events).evidence_run == ()
+
+
 def test_evidence_matches_whatever_the_spacing_of_the_command() -> None:
     events = [usage(1), *ran(1, "mon.lan", "dig   printer.lan  @10.20.0.1"), report(1)]
     assert score(MINI, events).evidence_run == ("empty-answer",)

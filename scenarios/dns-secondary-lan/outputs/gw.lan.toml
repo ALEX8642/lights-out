@@ -178,3 +178,46 @@ stdout = """
 [[command]]
 argv = ["uname", "-a"]
 stdout = "FreeBSD gw.lan 14.3-RELEASE-p4 FreeBSD 14.3-RELEASE-p4 stable/26.7 amd64\n"
+
+[[command]]
+argv = ["cat", "/etc/hosts"]
+stdout = """
+127.0.0.1       localhost
+10.20.0.1       gw.lan gw
+"""
+
+[[command]]
+argv = ["cat", "/etc/resolv.conf"]
+stdout = """
+domain lan
+nameserver 127.0.0.1
+"""
+
+[[command]]
+argv = ["drill", "nas.lan"]
+stdout = """
+;; ->>HEADER<<- opcode: QUERY, rcode: NOERROR, id: 50111
+;; flags: qr rd ra ; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 0
+;; QUESTION SECTION:
+;; nas.lan.     IN      A
+
+;; ANSWER SECTION:
+
+;; AUTHORITY SECTION:
+
+;; ADDITIONAL SECTION:
+
+;; Query time: 2 msec
+;; SERVER: 127.0.0.1
+;; WHEN: Tue Mar  3 13:12:05 2026
+;; MSG SIZE  rcvd: 25
+"""
+
+[[command]]
+argv = ["cat", "/etc/os-release"]
+stdout = """
+NAME=FreeBSD
+VERSION="14.3-RELEASE-p4"
+ID=freebsd
+PRETTY_NAME="FreeBSD 14.3-RELEASE-p4"
+"""

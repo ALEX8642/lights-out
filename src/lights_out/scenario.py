@@ -46,6 +46,8 @@ class ScenarioError(ValueError):
 class Host:
     name: str
     role: str
+    closed_world: bool = False
+    """The recordings are the host's whole state: files and services not recorded do not exist."""
 
 
 @dataclass(frozen=True)
@@ -175,8 +177,11 @@ def _tables(value: object, key: str, where: str) -> list[Mapping[str, object]]:
 def _hosts(value: object, where: str) -> tuple[Host, ...]:
     hosts: list[Host] = []
     for table in _tables(value, "hosts", where):
-        _only_keys(table, {"name", "role"}, f"{where}: hosts")
-        host = Host(_text(table, "name", where), _text(table, "role", where))
+        _only_keys(table, {"name", "role", "closed_world"}, f"{where}: hosts")
+        closed_world = table.get("closed_world", False)
+        if not isinstance(closed_world, bool):
+            raise ScenarioError(f"{where}: closed_world must be true or false")
+        host = Host(_text(table, "name", where), _text(table, "role", where), closed_world)
         if host.name == EXTERNAL:
             raise ScenarioError(f"{where}: host name {EXTERNAL!r} is reserved")
         if any(host.name == other.name for other in hosts):
