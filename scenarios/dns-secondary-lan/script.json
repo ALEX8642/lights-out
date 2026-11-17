@@ -1,0 +1,38 @@
+[
+  {
+    "text": "Start where the symptom is: which resolvers does the monitor use, and what does each one answer for a local name?",
+    "tool_calls": [
+      {"name": "run", "arguments": {"host": "mon.lan", "command": "cat /etc/resolv.conf"}},
+      {"name": "run", "arguments": {"host": "mon.lan", "command": "dig nas.lan @10.20.0.3"}},
+      {"name": "run", "arguments": {"host": "mon.lan", "command": "dig nas.lan @10.20.0.1"}}
+    ]
+  },
+  {
+    "text": "The first resolver answers. The second returns NOERROR with no records. Look at the second resolver's configuration on gw.lan.",
+    "tool_calls": [
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /conf/config.xml"}},
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /var/unbound/unbound.conf"}}
+    ]
+  },
+  {
+    "text": "",
+    "tool_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "category": "dns",
+          "host": "gw.lan",
+          "component": "secondary resolver (Unbound) on gw.lan",
+          "cause": "The second resolver forwards the lan zone to the primary but strips the private addresses in the answers, because lan is not declared with private-domain; clients that fall back to it get an empty answer.",
+          "evidence": [
+            "mon.lan: dig nas.lan @10.20.0.3 returns 10.20.0.50, so the primary answers",
+            "mon.lan: dig nas.lan @10.20.0.1 returns NOERROR with ANSWER: 0",
+            "gw.lan: unbound.conf has private-address 10.0.0.0/8 and a forward-zone for lan, and no private-domain line"
+          ],
+          "action": "change_config",
+          "recommendation": "Add private-domain: \"lan\" to the resolver on gw.lan through the firewall's own settings, then check with dig nas.lan @10.20.0.1. Nothing needs restarting beyond the resolver reloading its configuration."
+        }
+      }
+    ]
+  }
+]

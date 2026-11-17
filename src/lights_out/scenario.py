@@ -16,9 +16,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-CATEGORIES = frozenset(
-    {"dns", "routing", "dhcp", "wan", "service", "hardware", "config", "monitoring"}
-)
+# Where the fault lies. Kinds of cause ("misconfiguration") are deliberately not categories:
+# they overlap with every area, and the kind of fix is captured by the report's action instead.
+CATEGORIES = frozenset({"dns", "routing", "dhcp", "wan", "service", "hardware", "monitoring"})
 
 # The kinds of action a report can recommend. A closed list, so that a recommendation is a
 # choice that can be compared exactly instead of prose that has to be interpreted.

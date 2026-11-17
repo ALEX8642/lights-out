@@ -78,7 +78,8 @@ def test_host_lookup() -> None:
 
 def test_categories_are_a_closed_set() -> None:
     assert "dns" in CATEGORIES
-    assert len(CATEGORIES) == 8
+    assert "config" not in CATEGORIES  # a kind of cause, not an area; see scenario.py
+    assert len(CATEGORIES) == 7
 
 
 def test_a_host_without_recordings_is_fine(copy: Path) -> None:

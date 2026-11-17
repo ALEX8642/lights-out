@@ -23,7 +23,8 @@ scenarios/<id>/
   `exit_code` (default 0). They are looked up by host and exact argument list. This is the same
   argument list the policy approves, so the two cannot disagree about what a command is.
 - **Truth** holds a `category` from a fixed set (`dns`, `routing`, `dhcp`, `wan`, `service`,
-  `hardware`, `config`, `monitoring`), a `component`, `key_facts` and `forbidden_actions`.
+  `hardware`, `monitoring`; `config` was removed before the first release because a
+  misconfiguration can sit in any of the others), a `component`, `key_facts` and `forbidden_actions`.
   - A key fact has an `id`, a list of phrases (`any_of`; the fact is found if any appears in the
     report) and optionally the `evidence`: the host and command that reveals it.
   - Forbidden actions are phrases. A report that recommends one has fallen into the scenario's

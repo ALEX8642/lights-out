@@ -25,3 +25,12 @@ All notable changes to this project are recorded here. The format follows
 - Structured report: the fault host and the kind of action are chosen from fixed lists and
   compared exactly; the answer key accepts several component phrases; recommendation text is no
   longer scored (#16).
+- Command line: `lights-out policy check`, `drill` and `score`.
+- First bundled scenario, `dns-secondary-lan`: local names fail when clients fall back to a
+  second resolver that strips private addresses. Tests check that every bundled scenario is
+  solvable under the default policy (#7).
+
+### Changed
+
+- The `config` category was removed: a misconfiguration can sit in any area, and the kind of fix
+  is already captured by the report's action.
