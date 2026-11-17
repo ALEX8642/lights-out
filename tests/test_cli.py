@@ -142,3 +142,15 @@ def test_no_arguments_is_a_usage_error() -> None:
     with pytest.raises(SystemExit) as stop:
         main([])
     assert stop.value.code == 2
+
+
+def test_version_flag_prints_the_package_version(capsys: pytest.CaptureFixture[str]) -> None:
+    from importlib.metadata import version
+
+    import lights_out
+
+    assert lights_out.__version__ == version("lights-out")
+    with pytest.raises(SystemExit) as stop:
+        main(["--version"])
+    assert stop.value.code == 0
+    assert capsys.readouterr().out == f"lights-out {lights_out.__version__}\n"

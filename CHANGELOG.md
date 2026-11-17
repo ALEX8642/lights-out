@@ -6,6 +6,11 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
+First release. The guardrail, incident replay and scoring work end to end with a scripted
+stand-in for the model. No real model has been run yet.
+
 ### Added
 
 - Repository scaffold: CI (lint, format, type check, tests), sanitising check for IPv4
@@ -34,3 +39,4 @@ All notable changes to this project are recorded here. The format follows
 
 - The `config` category was removed: a misconfiguration can sit in any area, and the kind of fix
   is already captured by the report's action.
+- `lights-out --version`.
