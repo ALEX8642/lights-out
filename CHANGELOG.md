@@ -12,6 +12,9 @@ All notable changes to this project are recorded here. The format follows
   closed-list options; the model can only request one; the harness decides from the class, the
   preconditions and whether the maintainer can be reached whether it acts, asks or refuses, and
   always simulates. Scoring checks the fix decision against the answer key (#30).
+- Scenario `wan-stale-lease`: the internet stays down after the modem re-registers because the
+  firewall kept its old DHCP lease; the right fix is a WAN reload, and rebooting the modem or the
+  firewall is the trap (#32).
 
 ### Design
 
