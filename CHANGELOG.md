@@ -12,6 +12,14 @@ All notable changes to this project are recorded here. The format follows
   with the scripts, approval only by the maintainer with a reachability rule, band-aid monitoring,
   and drills that score the decision (#10).
 
+### Added
+
+- `lights-out drill --endpoint URL --model NAME`: drill any OpenAI-compatible endpoint, with
+  `--api-key-env` and `--temperature`. Standard library only. Endpoint failures stop the drill
+  as a model error; tool arguments that are not valid JSON get an error reply instead (#24).
+- The transcript's start event records the model, endpoint or script, temperature and the
+  lights-out version (#24).
+
 ### Changed
 
 - Policy v2: arguments are matched in any order, option values are bound to their options, and

@@ -73,6 +73,17 @@ proposal, decision and output; open it to see exactly what happened.
 The scripted model replays fixed turns from `script.json`. It shows the machinery working; it
 says nothing about how well a real model does.
 
+To drill a real model, point `drill` at any OpenAI-compatible endpoint instead of a script:
+
+```
+$ uv run lights-out drill scenarios/dns-secondary-lan \
+    --endpoint http://127.0.0.1:8000/v1 --model MODEL_NAME --out run.jsonl
+```
+
+Add `--api-key-env VAR` if the endpoint needs a key; the key is read from that environment
+variable and never written to the transcript. The transcript's first line records the model,
+endpoint and temperature.
+
 ## How it works
 
 - **Policy.** The model proposes a command as text. The harness never passes it to a shell. Two
