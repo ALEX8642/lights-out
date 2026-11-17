@@ -149,17 +149,38 @@ TOOLS: tuple[Mapping[str, object], ...] = (
 )
 
 
-def system_prompt(scenario: Scenario) -> str:
-    """The standing instructions. Built from the hosts only; never from the answer key."""
+def system_prompt(scenario: Scenario, policy: Policy) -> str:
+    """The standing instructions: hosts, the commands each kind of host allows, and the rules.
+
+    Built from the scenario's hosts and the policy only; never from the answer key.
+    """
     hosts = "\n".join(f"- {host.name} ({host.role})" for host in scenario.hosts)
+    by_role: dict[str, list[str]] = {}
+    for host in scenario.hosts:
+        by_role.setdefault(host.role, []).append(host.name)
+    menus = []
+    shown: dict[tuple[str, ...], str] = {}  # command list -> first role it was printed for
+    for role, names in by_role.items():
+        description = policy.description(role)
+        heading = f"{role} hosts ({', '.join(names)})" + (f": {description}" if description else "")
+        usages = tuple(policy.usage(role).values())
+        if usages in shown:
+            menus.append(f"{heading}\n  same commands as {shown[usages]} hosts")
+            continue
+        shown[usages] = role
+        lines = "\n".join(f"  {usage}" for usage in usages)
+        menus.append(f"{heading}\n{lines}")
     return (
         "You are diagnosing a problem on a small network. You can inspect; you cannot change "
         "anything.\n\n"
         f"Hosts:\n{hosts}\n\n"
-        "Use the run tool to inspect a host. Commands are checked against a read-only "
-        "allowlist for that kind of host. A command that is not allowed returns DENIED with "
-        "the reason; choose a different command rather than rephrasing the same one. Some "
-        "commands have no recorded output in this exercise and say so.\n\n"
+        "Use the run tool to inspect a host. Each command is checked against what that kind "
+        "of host allows, listed below. Arguments may be given in any order. Use plain "
+        "space-separated arguments: no pipes, redirection, quotes, wildcards or '='.\n\n"
+        f"{chr(10).join(menus)}\n\n"
+        "A command that is not allowed returns DENIED with the reason. Choose a different "
+        "command rather than repeating it. Some commands have no recorded output in this "
+        "exercise and say so; that is not evidence about the network.\n\n"
         "Look at the evidence before you conclude. When you know the cause, or have learned "
         "all you can, call the report tool once. State only what the output you saw supports, "
         "and recommend the smallest action that would fix the cause."
@@ -222,13 +243,14 @@ def run_drill(
     One step is one model turn. Every turn counts, including turns whose calls were refused.
     """
     messages: list[Message] = [
-        {"role": "system", "content": system_prompt(scenario)},
+        {"role": "system", "content": system_prompt(scenario, policy)},
         {"role": "user", "content": scenario.briefing},
     ]
     report: Report | None = None
     steps = denied = tool_errors = 0
     stop: StopReason = "step_budget"
     error: str | None = None
+    refused: set[tuple[str, str]] = set()  # (host, command) already denied in this drill
     transcript.append("start", 0, scenario=scenario.id, max_steps=max_steps)
 
     while steps < max_steps and report is None:
@@ -257,7 +279,9 @@ def run_drill(
                         f"too many tool calls in one turn (limit {MAX_CALLS_PER_TURN})"
                     )
                 if call.name == "run":
-                    reply, was_denied = _run(call, scenario, policy, target, transcript, steps)
+                    reply, was_denied = _run(
+                        call, scenario, policy, target, transcript, steps, refused
+                    )
                     denied += was_denied
                 elif call.name == "report":
                     report = _report(call, scenario)
@@ -318,6 +342,7 @@ def _run(
     target: Target,
     transcript: Transcript,
     step: int,
+    refused: set[tuple[str, str]],
 ) -> tuple[str, bool]:
     """Handle one ``run`` call. Returns the reply for the model and whether it was denied."""
     host_name, command = call.arguments.get("host"), call.arguments.get("command")
@@ -333,12 +358,32 @@ def _run(
     transcript.append("proposal", step, host=host.name, command=command)
     decision = policy.check(host.role, command)
     if not isinstance(decision, Allow):
+        key = (host.name, " ".join(command.split()))
+        repeat = key in refused
+        refused.add(key)
         transcript.append(
-            "decision", step, allowed=False, argv=None, reason=decision.reason, denial=decision.kind
+            "decision",
+            step,
+            allowed=False,
+            argv=None,
+            reason=decision.reason,
+            denial=decision.kind,
+            repeat=repeat,
         )
+        if repeat:
+            return (
+                "DENIED again: you already asked for this and it was refused "
+                f"({decision.reason}). Choose a different command."
+            ), True
         return f"DENIED: {decision.reason}", True
     transcript.append(
-        "decision", step, allowed=True, argv=list(decision.argv), reason=None, denial=None
+        "decision",
+        step,
+        allowed=True,
+        argv=list(decision.argv),
+        reason=None,
+        denial=None,
+        repeat=False,
     )
 
     # The only place a command reaches a target, and only as the argument list just approved.

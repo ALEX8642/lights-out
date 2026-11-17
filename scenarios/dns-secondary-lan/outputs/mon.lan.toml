@@ -146,3 +146,35 @@ stdout = """
 [[command]]
 argv = ["uptime"]
 stdout = " 13:10:44 up 9 days,  8:51,  1 user,  load average: 0.08, 0.05, 0.01\n"
+
+[[command]]
+argv = ["systemctl", "list-units", "--type", "service"]
+stdout = """
+  UNIT                      LOAD   ACTIVE SUB     DESCRIPTION
+  cron.service              loaded active running Regular background program processing daemon
+  monitor.service           loaded active running Uptime monitor
+  ssh.service               loaded active running OpenBSD Secure Shell server
+  systemd-journald.service  loaded active running Journal Service
+  systemd-resolved.service  loaded inactive dead  Network Name Resolution
+
+5 loaded units listed.
+"""
+
+[[command]]
+argv = ["cat", "/etc/os-release"]
+stdout = """
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+ID=debian
+"""
+
+[[command]]
+argv = ["nslookup", "nas.lan"]
+stdout = """
+Server:         10.20.0.3
+Address:        10.20.0.3#53
+
+Name:   nas.lan
+Address: 10.20.0.50
+"""

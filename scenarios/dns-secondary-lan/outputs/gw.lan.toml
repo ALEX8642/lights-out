@@ -141,3 +141,40 @@ vtnet1: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 
 [[command]]
 argv = ["uptime"]
 stdout = " 1:11PM  up 41 days, 22:07, 1 user, load averages: 0.21, 0.18, 0.16\n"
+
+[[command]]
+argv = ["service", "-e"]
+stdout = """
+/etc/rc.d/hostid
+/etc/rc.d/cleanvar
+/etc/rc.d/sshd
+/usr/local/etc/rc.d/unbound
+/usr/local/etc/rc.d/dpinger
+/usr/local/etc/rc.d/ntpd
+"""
+
+[[command]]
+argv = ["service", "unbound", "status"]
+stdout = "unbound is running as pid 71204.\n"
+
+[[command]]
+argv = ["sockstat", "-4", "-l"]
+stdout = """
+USER     COMMAND    PID   FD  PROTO  LOCAL ADDRESS         FOREIGN ADDRESS
+unbound  unbound    71204 5   udp4   10.20.0.1:53          *:*
+unbound  unbound    71204 6   tcp4   10.20.0.1:53          *:*
+unbound  unbound    71204 7   udp4   127.0.0.1:53          *:*
+root     sshd       1102  4   tcp4   10.20.0.1:22          *:*
+root     ntpd       1290  21  udp4   *:123                 *:*
+"""
+
+[[command]]
+argv = ["grep", "private", "/var/unbound/unbound.conf"]
+stdout = """
+  private-address: 10.0.0.0/8
+  private-address: 127.0.0.0/8
+"""
+
+[[command]]
+argv = ["uname", "-a"]
+stdout = "FreeBSD gw.lan 14.3-RELEASE-p4 FreeBSD 14.3-RELEASE-p4 stable/26.7 amd64\n"

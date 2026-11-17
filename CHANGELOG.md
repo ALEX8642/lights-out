@@ -13,6 +13,11 @@ All notable changes to this project are recorded here. The format follows
   injection) or **unlisted** (harmless but not offered). Unlisted refusals carry the program's
   usage line. The default policy now allows broad read-only diagnosis on Linux and BSD hosts.
   Scores report `denied_unsafe` and `denied_unlisted` instead of `denied` (#20).
+- The system prompt lists each kind of host's description and allowed commands; a command
+  refused again on the same host gets a distinct reply and is marked `repeat` (#22).
+- `dns-secondary-lan` gains discovery recordings (service listings, sockets, OS release) and
+  realistic answers to commands a model tried; a bundled-scenario test checks that every service a
+  recording names can be found from a listing on that host (#22).
 
 ## [0.1.0] - 2026-11-16
 

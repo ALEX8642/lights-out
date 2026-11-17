@@ -236,6 +236,12 @@ def test_default_policy_has_three_roles() -> None:
     assert DEFAULT.roles() == frozenset({"linux", "firewall", "dns"})
 
 
+def test_role_description(policy: Policy) -> None:
+    assert policy.description("linux") == ""
+    assert DEFAULT.description("firewall").startswith("FreeBSD")
+    assert DEFAULT.description("dns") != ""
+
+
 def test_every_default_program_has_a_usage_line() -> None:
     for role in DEFAULT.roles():
         assert DEFAULT.usage(role), role

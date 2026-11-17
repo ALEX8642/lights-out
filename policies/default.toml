@@ -83,6 +83,9 @@ journalctl = "--vacuum-size|--vacuum-time|--vacuum-files|--rotate|--flush|--sync
 ping = "-[A-Za-z]*f[A-Za-z]*|--flood"
 
 # ---------------------------------------------------------------------------- linux
+[roles.linux]
+description = "Linux (Debian or Ubuntu) with systemd"
+
 [roles.linux.programs.ip]
 usage = "ip [-br] [-4|-6] addr|route|link|neigh|rule [show|list|get] [dev IFACE] [ADDRESS]"
 args = [
@@ -281,10 +284,14 @@ forms = [["aux"], ["auxww"], ["-ef"], ["-e"], ["-eF"], ["axjf"]]
 # ---------------------------------------------------------------------------- dns
 # A Linux host whose job is the network's primary DNS resolver: the same commands as linux.
 [roles.dns]
+description = "Linux with systemd, running the network's primary DNS resolver"
 extends = ["linux"]
 
 # ---------------------------------------------------------------------------- firewall
 # A BSD-based firewall that also runs a local DNS resolver.
+[roles.firewall]
+description = "FreeBSD-based firewall and router (pf), also running a local DNS resolver; no systemd, no Linux tools"
+
 [roles.firewall.programs.pfctl]
 usage = "pfctl -s rules|nat|states|info|labels|timeouts|memory|Interfaces|Tables|all [-v|-vv] | pfctl -t TABLE -T show"
 values = { "-s" = "rules|nat|states|info|labels|timeouts|memory|Interfaces|Tables|all|queue|osfp|r|n|s|i", "-t" = "[A-Za-z0-9_]+", "-T" = "show" }
