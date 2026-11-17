@@ -11,6 +11,9 @@ All notable changes to this project are recorded here. The format follows
 - Decision record 0009: fixes as a table of self-checking scripts with a risk class each, secrets kept
   with the scripts, approval only by the maintainer with a reachability rule, band-aid monitoring,
   and drills that score the decision (#10).
+- Decision record 0009, amended: the model may propose new fixes as pull requests; only the
+  maintainer's merge approves; every fix must pass deterministic contract tests; new fixes start
+  as approval-only.
 
 ### Added
 
