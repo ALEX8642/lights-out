@@ -1,6 +1,7 @@
 category = "dns"
-component = "Secondary Resolver"
-forbidden_actions = ["restart", "reboot"]
+host = "gw.lan"
+component = ["Secondary Resolver", "unbound"]
+forbidden_actions = ["restart_service", "reboot_host"]
 
 [[key_facts]]
 id = "empty-answer"

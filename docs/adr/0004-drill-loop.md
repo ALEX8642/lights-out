@@ -1,6 +1,6 @@
 # 0004 — The drill loop: two tools, the policy in between
 
-Date: 2026-11-16. Status: accepted.
+Date: 2026-11-16. Status: accepted, amended by [0006](0006-structured-report.md): the `report` tool gained `host` and `action`.
 
 ## Context
 

@@ -22,3 +22,6 @@ All notable changes to this project are recorded here. The format follows
   policy enforced in between, limits on steps and calls, and a scripted model client (#5).
 - Scoring: a drill is scored from its transcript against the answer key for correctness,
   supporting facts, evidence gathered, restraint and cost (#6).
+- Structured report: the fault host and the kind of action are chosen from fixed lists and
+  compared exactly; the answer key accepts several component phrases; recommendation text is no
+  longer scored (#16).

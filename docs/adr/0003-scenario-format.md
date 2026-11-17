@@ -1,6 +1,6 @@
 # 0003 — Scenario format: a directory with a hidden answer key
 
-Date: 2026-11-16. Status: accepted.
+Date: 2026-11-16. Status: accepted, amended by [0006](0006-structured-report.md): the answer key gained a fault `host`, `component` became a list of accepted phrases, and `forbidden_actions` became entries from a fixed action list.
 
 ## Context
 
