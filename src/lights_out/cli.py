@@ -12,6 +12,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from lights_out import __version__
 from lights_out.agent import ScriptedModel, run_drill
 from lights_out.policy import Allow, Policy, PolicyError
 from lights_out.scenario import ScenarioError, load_scenario
@@ -36,6 +37,7 @@ def _parser() -> argparse.ArgumentParser:
         prog="lights-out",
         description="Guardrailed ops agent for a self-hosted LLM, tested on replayed incidents.",
     )
+    parser.add_argument("--version", action="version", version=f"lights-out {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
     policy = commands.add_parser("policy", help="work with a command policy")

@@ -13,8 +13,9 @@ or small-office network, and answers three questions about it with numbers:
 
 ## Status
 
-Pre-release. Version 0.1 is nearly complete: the guardrail, incident replay and scoring work end
-to end with a scripted stand-in for the model. Running a real model comes in 0.2.
+Version 0.1.0. The guardrail, incident replay and scoring work end to end with a scripted
+stand-in for the model. No real model has been run yet; that is 0.2, and until then the project
+makes no claim about how well any model diagnoses anything.
 
 | Version | Contents |
 |---|---|

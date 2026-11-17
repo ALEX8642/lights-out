@@ -1,6 +1,6 @@
 [project]
 name = "lights-out"
-version = "0.0.0"
+version = "0.1.0"
 description = "Guardrailed on-prem ops agent: replayed incident drills, enforced read-only policy, energy per correct diagnosis"
 readme = "README.md"
 authors = [{ name = "Alexander Feht" }]
