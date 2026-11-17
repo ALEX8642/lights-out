@@ -1,6 +1,6 @@
 # 0002 — Policy grammar: refuse, split, match
 
-Date: 2026-11-16. Status: accepted.
+Date: 2026-11-16. Status: accepted, amended by [0007](0007-policy-v2.md): arguments in any order, option values bound to options, and refusals classed as unsafe or unlisted.
 
 ## Context
 
