@@ -17,9 +17,19 @@ from lights_out.agent import (
     ToolCall,
     run_drill,
     system_prompt,
+    tools_for,
 )
 from lights_out.policy import Allow, Decision, Policy
-from lights_out.scenario import ACTIONS, Host, KeyFact, Scenario, Truth, load_scenario
+from lights_out.scenario import (
+    ACTIONS,
+    Fix,
+    FixState,
+    Host,
+    KeyFact,
+    Scenario,
+    Truth,
+    load_scenario,
+)
 from lights_out.targets import CommandResult, ReplayTarget
 from lights_out.transcript import Event, Transcript, read_transcript
 
@@ -473,3 +483,152 @@ def test_scripted_model_keeps_a_copy_of_what_it_was_given() -> None:
     model.complete(messages, TOOLS)
     messages.append({"role": "user", "content": "later"})
     assert len(model.seen[0]) == 1
+
+
+# ------------------------------------------------------------------ fixes
+
+
+RELOAD = Fix(
+    "resolver_reload", "gw.lan", "reload the gateway's DNS resolver", "act_alone",
+    ("config_valid",), {"mode": ("dry-run", "apply")},
+)  # fmt: skip
+REBOOT = Fix(
+    "gateway_reboot", "gw.lan", "reboot the gateway", "ask_then_act", ("reload_failed",), {}
+)
+REPLACE = Fix("swap_router", "gw.lan", "replace the gateway", "approval_only", (), {})
+
+
+def with_fixes(
+    reachability: str = "home", approval: str = "none", **preconditions: bool
+) -> Scenario:
+    values = {"config_valid": True, "reload_failed": False, **preconditions}
+    return dataclasses.replace(
+        MINI,
+        fixes=(RELOAD, REBOOT, REPLACE),
+        state=FixState(reachability, approval, values),
+    )
+
+
+def fix(fix_id: str, call_id: str = "f1", **options: str) -> ToolCall:
+    arguments: dict[str, object] = {"id": fix_id, "reason": "because"}
+    if options:
+        arguments["options"] = options
+    return ToolCall(call_id, "fix", arguments)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "fix_id", "outcome", "words"),
+    [
+        (with_fixes(), "resolver_reload", "acted", "ran"),
+        (
+            with_fixes(config_valid=False),
+            "resolver_reload",
+            "refused",
+            "precondition not met: config_valid",
+        ),
+        (
+            with_fixes(reload_failed=True, approval="approve"),
+            "gateway_reboot",
+            "asked_approved",
+            "approved",
+        ),
+        (
+            with_fixes(reload_failed=True, approval="deny"),
+            "gateway_reboot",
+            "asked_denied",
+            "declined",
+        ),
+        (with_fixes(reload_failed=True), "gateway_reboot", "asked_no_answer", "no answer"),
+        (
+            with_fixes("online", "approve", reload_failed=True),
+            "gateway_reboot",
+            "asked_approved",
+            "approved",
+        ),
+        (
+            with_fixes("away", reload_failed=True),
+            "gateway_reboot",
+            "acted_unreachable",
+            "cannot be reached",
+        ),
+        (with_fixes("away"), "gateway_reboot", "refused", "reload_failed"),
+        (with_fixes("away", approval="approve"), "swap_router", "asked_no_answer", "queued"),
+        (with_fixes("home", approval="approve"), "swap_router", "asked_approved", "approved"),
+    ],
+)
+def test_the_harness_decides_what_happens_to_a_fix(
+    tmp_path: Path, scenario: Scenario, fix_id: str, outcome: str, words: str
+) -> None:
+    drill = Drill(tmp_path, [turn(fix(fix_id)), turn(report())], scenario=scenario)
+    assert drill.of("fix") == [
+        {
+            "id": fix_id,
+            "reason": "because",
+            "options": drill.of("fix")[0]["options"],
+            "outcome": outcome,
+        }
+    ]
+    reply = drill.tool_replies()[0]
+    assert words in reply
+    assert "drill" in reply or outcome in {"asked_denied", "asked_no_answer", "refused"}
+    assert drill.target.calls == []  # a fix never reaches a target in a drill
+
+
+def test_options_default_to_the_first_allowed_value_and_are_recorded(tmp_path: Path) -> None:
+    drill = Drill(tmp_path, [turn(fix("resolver_reload")), turn(report())], scenario=with_fixes())
+    assert drill.of("fix")[0]["options"] == {"mode": "dry-run"}
+    drill2 = Drill(
+        tmp_path / "2",
+        [turn(fix("resolver_reload", mode="apply")), turn(report())],
+        scenario=with_fixes(),
+    )
+    assert drill2.of("fix")[0]["options"] == {"mode": "apply"}
+
+
+@pytest.mark.parametrize(
+    ("call", "error"),
+    [
+        (fix("format_disk"), "unknown fix: format_disk"),
+        (fix("resolver_reload", mode="rm -rf /"), "mode must be one of: dry-run, apply"),
+        (fix("resolver_reload", host="mon.lan"), "unknown option for resolver_reload: host"),
+        (ToolCall("f1", "fix", {"id": "resolver_reload"}), "reason must be a non-empty string"),
+        (ToolCall("f1", "fix", {"reason": "x"}), "id must be a string"),
+        (
+            ToolCall("f1", "fix", {"id": "resolver_reload", "reason": "x", "options": "all"}),
+            "options must be an object",
+        ),
+    ],
+)
+def test_malformed_fix_requests_are_tool_errors(tmp_path: Path, call: ToolCall, error: str) -> None:
+    drill = Drill(tmp_path, [turn(call), turn(report())], scenario=with_fixes())
+    assert drill.result.tool_errors == 1
+    assert error in drill.tool_replies()[0]
+    assert drill.of("fix") == []
+
+
+def test_a_fix_can_be_requested_once_per_drill(tmp_path: Path) -> None:
+    drill = Drill(
+        tmp_path,
+        [turn(fix("resolver_reload", "a")), turn(fix("resolver_reload", "b")), turn(report())],
+        scenario=with_fixes(),
+    )
+    assert len(drill.of("fix")) == 1
+    assert "already requested" in drill.tool_replies()[-1]
+
+
+def test_the_fix_tool_exists_only_when_the_scenario_offers_fixes() -> None:
+    assert [t["function"]["name"] for t in tools_for(MINI)] == ["run", "report"]  # type: ignore[index]
+    tools = tools_for(with_fixes())
+    names = [t["function"]["name"] for t in tools]  # type: ignore[index]
+    assert names == ["run", "report", "fix"]
+    schema = tools[2]["function"]["parameters"]["properties"]  # type: ignore[index]
+    assert schema["id"]["enum"] == ["resolver_reload", "gateway_reboot", "swap_router"]
+
+
+def test_the_prompt_lists_the_offered_fixes_without_their_preconditions_state() -> None:
+    prompt = system_prompt(with_fixes(reload_failed=True), POLICY)
+    assert "resolver_reload (gw.lan): reload the gateway's DNS resolver" in prompt
+    assert "options: mode = dry-run | apply" in prompt
+    assert "asks the maintainer first" in prompt  # the reboot's class, in plain words
+    assert "reload_failed" not in prompt  # the state the harness checks is not given away
+    assert "fix tool" not in system_prompt(MINI, POLICY)

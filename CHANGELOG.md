@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Fix tool in drills: scenarios offer scripted fixes with a risk class, preconditions and
+  closed-list options; the model can only request one; the harness decides from the class, the
+  preconditions and whether the maintainer can be reached whether it acts, asks or refuses, and
+  always simulates. Scoring checks the fix decision against the answer key (#30).
+
 ### Design
 
 - Decision record 0009: fixes as a table of self-checking scripts with a risk class each, secrets kept

@@ -11,6 +11,7 @@ The format is described in docs/adr/0003-scenario-format.md.
 
 from __future__ import annotations
 
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -33,6 +34,17 @@ ACTIONS = frozenset(
         "investigate_further",  # the evidence available does not settle it
     }
 )
+
+# How the harness may handle a fix (docs/adr/0009-fix-table-and-approval.md).
+FIX_CLASSES = frozenset({"act_alone", "ask_then_act", "approval_only"})
+REACHABILITY = frozenset({"online", "home", "away"})  # can the maintainer be asked, and how
+APPROVAL = frozenset({"approve", "deny", "none"})  # what he answers, if asked
+# What the harness did with a requested fix.
+OUTCOMES = frozenset(
+    {"acted", "acted_unreachable", "asked_approved", "asked_denied", "asked_no_answer", "refused"}
+)
+NO_FIX = "none"
+_FIX_ID = re.compile(r"[a-z][a-z0-9_]*")
 
 EXTERNAL = "external"
 """The fault host when the cause is not on any host in the scenario."""
@@ -72,6 +84,27 @@ class KeyFact:
 
 
 @dataclass(frozen=True)
+class Fix:
+    """A scripted fix the scenario offers. In drills it is only ever simulated."""
+
+    id: str
+    host: str
+    description: str
+    fix_class: str  # one of FIX_CLASSES
+    preconditions: tuple[str, ...]  # names; their values are in the scenario's state
+    options: Mapping[str, tuple[str, ...]]  # option -> allowed values
+
+
+@dataclass(frozen=True)
+class FixState:
+    """What the fixes' precondition checks would see, and whether the maintainer can be asked."""
+
+    reachability: str
+    approval: str
+    preconditions: Mapping[str, bool]
+
+
+@dataclass(frozen=True)
 class Truth:
     """The answer key. Never shown to the agent."""
 
@@ -80,6 +113,9 @@ class Truth:
     component: tuple[str, ...]  # accepted phrases for the part at fault
     key_facts: tuple[KeyFact, ...]
     forbidden_actions: tuple[str, ...]  # entries of ACTIONS that are the scenario's trap
+    expected_fix: str | None = None  # a fix id, NO_FIX, or None when the scenario offers no fixes
+    expected_outcome: str | None = None  # one of OUTCOMES, with an expected fix id
+    forbidden_fixes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,9 +126,14 @@ class Scenario:
     hosts: tuple[Host, ...]
     recordings: Mapping[tuple[str, tuple[str, ...]], Recording]
     truth: Truth
+    fixes: tuple[Fix, ...] = ()
+    state: FixState | None = None
 
     def host(self, name: str) -> Host | None:
         return next((host for host in self.hosts if host.name == name), None)
+
+    def fix(self, fix_id: str) -> Fix | None:
+        return next((fix for fix in self.fixes if fix.id == fix_id), None)
 
 
 def load_scenario(path: Path) -> Scenario:
@@ -102,12 +143,14 @@ def load_scenario(path: Path) -> Scenario:
 
     where = "scenario.toml"
     data = _read(path / where, where)
-    _only_keys(data, {"id", "title", "briefing", "hosts"}, where)
+    _only_keys(data, {"id", "title", "briefing", "hosts", "fixes", "state"}, where)
     scenario_id = _text(data, "id", where)
     if scenario_id != path.name:
         raise ScenarioError(f"{where}: id {scenario_id!r} does not match directory {path.name!r}")
     hosts = _hosts(data.get("hosts"), where)
     names = {host.name for host in hosts}
+    fixes = _fixes(data.get("fixes"), names, where)
+    state = _state(data.get("state"), fixes, where)
 
     recordings: dict[tuple[str, tuple[str, ...]], Recording] = {}
     outputs = path / "outputs"
@@ -127,7 +170,9 @@ def load_scenario(path: Path) -> Scenario:
         briefing=_text(data, "briefing", where),
         hosts=hosts,
         recordings=recordings,
-        truth=_truth(_read(path / "truth.toml", "truth.toml"), names),
+        truth=_truth(_read(path / "truth.toml", "truth.toml"), names, fixes),
+        fixes=fixes,
+        state=state,
     )
 
 
@@ -206,9 +251,83 @@ def _recordings(data: Mapping[str, object], where: str) -> list[tuple[tuple[str,
     return recordings
 
 
-def _truth(data: Mapping[str, object], hosts: set[str]) -> Truth:
+def _fixes(value: object, hosts: set[str], where: str) -> tuple[Fix, ...]:
+    if value is None:
+        return ()
+    fixes: list[Fix] = []
+    for table in _tables(value, "fixes", where):
+        spot = f"{where}: fixes"
+        _only_keys(table, {"id", "host", "description", "class", "preconditions", "options"}, spot)
+        fix_id = _text(table, "id", spot)
+        if not _FIX_ID.fullmatch(fix_id):
+            raise ScenarioError(f"{spot}: fix id {fix_id!r} must match {_FIX_ID.pattern}")
+        if any(fix_id == other.id for other in fixes):
+            raise ScenarioError(f"{spot}: duplicate fix: {fix_id}")
+        host = _text(table, "host", spot)
+        if host not in hosts:
+            raise ScenarioError(f"{spot}: {fix_id}: unknown host: {host}")
+        fix_class = _text(table, "class", spot)
+        if fix_class not in FIX_CLASSES:
+            raise ScenarioError(
+                f"{spot}: {fix_id}: class must be one of {', '.join(sorted(FIX_CLASSES))}"
+            )
+        options_in = table.get("options", {})
+        if not isinstance(options_in, Mapping):
+            raise ScenarioError(f"{spot}: {fix_id}: options must be a table")
+        options = {
+            name: _texts(options_in, name, f"{spot}: {fix_id}: options", allow_empty=False)
+            for name in options_in
+        }
+        fixes.append(
+            Fix(
+                id=fix_id,
+                host=host,
+                description=_text(table, "description", spot),
+                fix_class=fix_class,
+                preconditions=_texts(table, "preconditions", spot, allow_empty=True),
+                options=options,
+            )
+        )
+    return tuple(fixes)
+
+
+def _state(value: object, fixes: tuple[Fix, ...], where: str) -> FixState | None:
+    if value is None:
+        if fixes:
+            raise ScenarioError(f"{where}: fixes need a [state] table")
+        return None
+    spot = f"{where}: state"
+    if not isinstance(value, Mapping):
+        raise ScenarioError(f"{spot}: expected a table")
+    _only_keys(value, {"reachability", "approval", "preconditions"}, spot)
+    reachability = _text(value, "reachability", spot)
+    if reachability not in REACHABILITY:
+        raise ScenarioError(
+            f"{spot}: reachability must be one of {', '.join(sorted(REACHABILITY))}"
+        )
+    approval = _text(value, "approval", spot)
+    if approval not in APPROVAL:
+        raise ScenarioError(f"{spot}: approval must be one of {', '.join(sorted(APPROVAL))}")
+    values = value.get("preconditions", {})
+    if not isinstance(values, Mapping) or not all(isinstance(v, bool) for v in values.values()):
+        raise ScenarioError(f"{spot}: preconditions must map names to true or false")
+    for fix in fixes:
+        for name in fix.preconditions:
+            if name not in values:
+                raise ScenarioError(f"{spot}: no value for precondition {name} (fix {fix.id})")
+    return FixState(reachability, approval, dict(values))
+
+
+def _truth(data: Mapping[str, object], hosts: set[str], fixes: tuple[Fix, ...] = ()) -> Truth:
     where = "truth.toml"
-    _only_keys(data, {"category", "host", "component", "forbidden_actions", "key_facts"}, where)
+    _only_keys(
+        data,
+        {
+            "category", "host", "component", "forbidden_actions", "key_facts",
+            "expected_fix", "expected_outcome", "forbidden_fixes",
+        },
+        where,
+    )  # fmt: skip
     category = _text(data, "category", where)
     if category not in CATEGORIES:
         raise ScenarioError(
@@ -239,10 +358,33 @@ def _truth(data: Mapping[str, object], hosts: set[str]) -> Truth:
             if pair[0] not in hosts:
                 raise ScenarioError(f"{where}: evidence of {fact_id}: unknown host: {pair[0]}")
         facts.append(KeyFact(fact_id, _texts(table, "any_of", where, allow_empty=False), pair))
+    ids = {fix.id for fix in fixes}
+    expected_fix = data.get("expected_fix")
+    expected_outcome = data.get("expected_outcome")
+    forbidden_fixes = _texts(data, "forbidden_fixes", where, allow_empty=True)
+    if expected_fix is None and fixes:
+        raise ScenarioError(f"{where}: the scenario offers fixes, so expected_fix is required")
+    if expected_fix is not None:
+        if not fixes:
+            raise ScenarioError(f"{where}: expected_fix needs fixes in scenario.toml")
+        if expected_fix != NO_FIX and expected_fix not in ids:
+            raise ScenarioError(f"{where}: expected_fix {expected_fix!r} is not an offered fix")
+        if expected_fix == NO_FIX and expected_outcome is not None:
+            raise ScenarioError(f"{where}: expected_outcome makes no sense with expected_fix none")
+        if expected_fix != NO_FIX and expected_outcome not in OUTCOMES:
+            raise ScenarioError(
+                f"{where}: expected_outcome must be one of {', '.join(sorted(OUTCOMES))}"
+            )
+    unknown_fixes = [f for f in forbidden_fixes if f not in ids]
+    if unknown_fixes:
+        raise ScenarioError(f"{where}: forbidden_fixes: not offered: {', '.join(unknown_fixes)}")
     return Truth(
         category=category,
         host=fault_host,
         component=_texts(data, "component", where, allow_empty=False),
         key_facts=tuple(facts),
         forbidden_actions=forbidden,
+        expected_fix=expected_fix if isinstance(expected_fix, str) else None,
+        expected_outcome=expected_outcome if isinstance(expected_outcome, str) else None,
+        forbidden_fixes=forbidden_fixes,
     )

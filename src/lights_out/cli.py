@@ -142,6 +142,15 @@ def _score(args: argparse.Namespace) -> int:
     return 0 if result.correct else 1
 
 
+def _fix_line(result: Score) -> list[str]:
+    if result.fix_correct is None:
+        return []
+    asked = ", ".join(result.fixes_requested) or "none"
+    verdict = "ok" if result.fix_correct else "WRONG"
+    outcome = f" -> {result.fix_outcome}" if result.fix_outcome else ""
+    return [f"  fix decision      {verdict}: requested {asked}{outcome}"]
+
+
 def _summary(result: Score) -> str:
     def mark(ok: bool) -> str:
         return "ok" if ok else "WRONG"
@@ -164,6 +173,7 @@ def _summary(result: Score) -> str:
         f"  refused, unsafe   {result.denied_unsafe}",
         f"  refused, unlisted {result.denied_unlisted}",
         f"  tool errors       {result.tool_errors}",
+        *_fix_line(result),
         f"  steps             {result.steps}",
         f"  tokens            {result.prompt_tokens} prompt, {result.completion_tokens} completion",
     ]

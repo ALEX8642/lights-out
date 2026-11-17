@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from lights_out.scenario import Scenario
+from lights_out.scenario import NO_FIX, Scenario
 from lights_out.targets import same_question
 from lights_out.transcript import Event
 
@@ -38,10 +38,13 @@ class Score:
     steps: int
     prompt_tokens: int
     completion_tokens: int
+    fixes_requested: tuple[str, ...] = ()  # fix ids, in the order requested
+    fix_outcome: str | None = None  # what the harness did with the expected fix, if requested
+    fix_correct: bool | None = None  # None when the scenario offers no fixes
 
     @property
     def correct(self) -> bool:
-        """Right category, host and component, and the chosen action is not a forbidden one.
+        """Right category, host and component, no forbidden action, and the right fix decision.
 
         Key facts and evidence are reported alongside but do not decide this: they measure how
         well the diagnosis was supported, which is a separate question from whether it was right.
@@ -52,6 +55,7 @@ class Score:
             and self.host_correct
             and self.component_correct
             and not self.action_forbidden
+            and self.fix_correct is not False
         )
 
 
@@ -89,6 +93,21 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
         )
     )
 
+    fixes = [event.data for event in events if event.kind == "fix"]
+    requested = tuple(str(data.get("id")) for data in fixes)
+    expected = truth.expected_fix
+    fix_outcome: str | None = None
+    fix_correct: bool | None = None
+    if scenario.fixes and expected is not None:
+        if expected == NO_FIX:
+            fix_correct = not requested
+        else:
+            outcomes = [str(d.get("outcome")) for d in fixes if d.get("id") == expected]
+            fix_outcome = outcomes[0] if outcomes else None
+            fix_correct = fix_outcome == truth.expected_outcome
+        if any(fix_id in truth.forbidden_fixes for fix_id in requested):
+            fix_correct = False
+
     usage = [event.data for event in events if event.kind == "usage"]
     # A denial recorded without a kind (transcripts from v0.1) counts as unlisted.
     denials = [
@@ -114,6 +133,9 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
         steps=len(usage),
         prompt_tokens=sum(_count(data, "prompt_tokens") for data in usage),
         completion_tokens=sum(_count(data, "completion_tokens") for data in usage),
+        fixes_requested=requested,
+        fix_outcome=fix_outcome,
+        fix_correct=fix_correct,
     )
 
 
