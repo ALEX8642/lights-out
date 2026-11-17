@@ -18,7 +18,7 @@ from lights_out.agent import (
     system_prompt,
 )
 from lights_out.policy import Allow, Decision, Policy
-from lights_out.scenario import ACTIONS, KeyFact, Scenario, Truth, load_scenario
+from lights_out.scenario import ACTIONS, Host, KeyFact, Scenario, Truth, load_scenario
 from lights_out.targets import CommandResult, ReplayTarget
 from lights_out.transcript import Event, Transcript, read_transcript
 
@@ -136,6 +136,7 @@ def test_transcript_contents(tmp_path: Path) -> None:
             "argv": ["dig", "printer.lan", "@10.20.0.1"],
             "reason": None,
             "denial": None,
+            "repeat": False,
         }
     ]
     output = drill.of("output")[0]
@@ -179,7 +180,13 @@ def test_denied_command_never_reaches_the_target(tmp_path: Path) -> None:
     assert drill.tool_replies() == ["DENIED: forbidden character: ;"]
     assert drill.kinds() == ["start", "usage", "proposal", "decision", "usage", "report", "end"]
     assert drill.of("decision") == [
-        {"allowed": False, "argv": None, "reason": "forbidden character: ;", "denial": "unsafe"}
+        {
+            "allowed": False,
+            "argv": None,
+            "reason": "forbidden character: ;",
+            "denial": "unsafe",
+            "repeat": False,
+        }
     ]
 
 
@@ -358,10 +365,58 @@ def test_nothing_from_the_answer_key_reaches_the_model(tmp_path: Path) -> None:
 
 
 def test_system_prompt_describes_the_hosts_and_the_rules() -> None:
-    prompt = system_prompt(MINI)
+    prompt = system_prompt(MINI, POLICY)
     assert "mon.lan (linux)" in prompt and "gw.lan (firewall)" in prompt
     assert "DENIED" in prompt
-    assert all(phrase not in prompt for phrase in MINI.truth.component)
+
+
+def test_system_prompt_does_not_depend_on_the_answer_key() -> None:
+    # The command menu comes from the policy and may share words with an answer key (a resolver
+    # directory, say). What matters is that the prompt is built without looking at the key.
+    other = Truth("routing", "mon.lan", ("anything else",), MINI.truth.key_facts, ())
+    assert system_prompt(dataclasses.replace(MINI, truth=other), POLICY) == system_prompt(
+        MINI, POLICY
+    )
+
+
+def test_system_prompt_lists_the_commands_for_each_kind_of_host_present() -> None:
+    prompt = system_prompt(MINI, POLICY)
+    for role in ("linux", "firewall"):
+        for usage in POLICY.usage(role).values():
+            assert usage in prompt
+    assert POLICY.description("firewall") in prompt
+    assert "dns hosts" not in prompt  # no dns host in this scenario
+
+
+def test_a_role_with_the_same_commands_as_another_refers_to_it() -> None:
+    three = dataclasses.replace(MINI, hosts=(*MINI.hosts, Host("dns1.lan", "dns")))
+    prompt = system_prompt(three, POLICY)
+    assert prompt.count(POLICY.usage("linux")["ip"]) == 1
+    assert "same commands as linux hosts" in prompt
+
+
+def test_system_prompt_lists_a_role_once_however_many_hosts_have_it() -> None:
+    two = dataclasses.replace(MINI, hosts=(*MINI.hosts, Host("mon2.lan", "linux")))
+    prompt = system_prompt(two, POLICY)
+    assert prompt.count(POLICY.usage("linux")["ip"]) == 1
+    assert "linux hosts (mon.lan, mon2.lan)" in prompt
+
+
+def test_a_repeated_refused_command_is_called_out(tmp_path: Path) -> None:
+    drill = Drill(
+        tmp_path,
+        [
+            turn(run("mon.lan", "cat /etc/shadow", "a")),
+            turn(run("mon.lan", "cat /etc/shadow", "b"), run("gw.lan", "cat /etc/shadow", "c")),
+            turn(report()),
+        ],
+    )
+    first, again, other_host = drill.tool_replies()
+    assert first == "DENIED: refused: protected file: /etc/shadow"
+    assert again.startswith("DENIED again: you already asked for this and it was refused")
+    assert other_host == "DENIED: refused: protected file: /etc/shadow"
+    assert [d["repeat"] for d in drill.of("decision")] == [False, True, False]
+    assert drill.result.denied == 3
 
 
 def test_tool_schemas_are_run_and_report() -> None:

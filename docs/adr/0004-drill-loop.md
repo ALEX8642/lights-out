@@ -1,6 +1,6 @@
 # 0004 — The drill loop: two tools, the policy in between
 
-Date: 2026-11-16. Status: accepted, amended by [0006](0006-structured-report.md): the `report` tool gained `host` and `action`.
+Date: 2026-11-16. Status: accepted, amended by [0006](0006-structured-report.md) (report fields) and by the section *Amendment 2026-11-17* below (what the model is told).
 
 ## Context
 
@@ -55,3 +55,23 @@ oversteps, and what is recorded.
   recordings.
 - The system prompt is part of the instrument: changing its wording can change scores. Changes
   to it should be treated like changes to a measurement procedure and noted in the changelog.
+
+## Amendment 2026-11-17: the model is told its commands
+
+The first real-model drill showed a model guessing at the allowlist for twenty turns. A real
+operator agent is given its tools, so the model now is too:
+
+- The system prompt lists, for each kind of host in the scenario, a short description of the
+  host ("FreeBSD-based firewall ... no systemd, no Linux tools") and the usage line of every
+  program the policy allows there. A role whose commands are the same as one already listed
+  says so instead of repeating them. The prompt is built from the scenario's hosts and the
+  policy only; a test checks that it is identical whatever the answer key says.
+- The prompt states the syntax rules (plain arguments, any order, no quotes or wildcards) and
+  that a command with no recorded output is not evidence about the network.
+- A command refused a second time on the same host gets "DENIED again: you already asked for
+  this ..." instead of the same reply, and the transcript marks it `repeat`. It still counts as a
+  refusal.
+
+The menu comes from the policy, so it can share words with an answer key: the firewall's `cat`
+usage names the resolver's directory. That is information an operator would have and is
+accepted. Changing the policy's usage lines changes the prompt and therefore the instrument.

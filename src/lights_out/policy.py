@@ -127,9 +127,15 @@ class _Unsafe:
 class Policy:
     """Unsafe rules for every role, and allowed programs per host role."""
 
-    def __init__(self, unsafe: _Unsafe, roles: Mapping[str, Mapping[str, _Program]]) -> None:
+    def __init__(
+        self,
+        unsafe: _Unsafe,
+        roles: Mapping[str, Mapping[str, _Program]],
+        descriptions: Mapping[str, str] | None = None,
+    ) -> None:
         self._unsafe = unsafe
         self._roles = roles
+        self._descriptions = dict(descriptions or {})
 
     @classmethod
     def from_toml(cls, path: Path) -> Policy:
@@ -147,10 +153,15 @@ class Policy:
         roles_in = _table(data.get("roles"), "roles")
         own: dict[str, dict[str, _Program]] = {}
         extends: dict[str, list[str]] = {}
+        descriptions: dict[str, str] = {}
         for role, role_value in roles_in.items():
             where = f"roles.{role}"
             table = _table(role_value, where)
-            _only_keys(table, {"programs", "extends"}, where)
+            _only_keys(table, {"programs", "extends", "description"}, where)
+            description = table.get("description", "")
+            if not isinstance(description, str):
+                raise PolicyError(f"{where}: description must be a string")
+            descriptions[role] = description
             parents = table.get("extends", [])
             if not isinstance(parents, list) or not all(isinstance(p, str) for p in parents):
                 raise PolicyError(f"{where}: extends must be a list of role names")
@@ -168,10 +179,14 @@ class Policy:
                 programs[program] = _load_program(_table(value, spot), spot)
             own[role] = programs
         roles = {role: _resolve(role, own, extends, ()) for role in own}
-        return cls(unsafe, roles)
+        return cls(unsafe, roles, descriptions)
 
     def roles(self) -> frozenset[str]:
         return frozenset(self._roles)
+
+    def description(self, role: str) -> str:
+        """What kind of host ``role`` is, in a few words, or "" if the policy does not say."""
+        return self._descriptions.get(role, "")
 
     def usage(self, role: str) -> dict[str, str]:
         """Each program allowed on ``role`` and its usage line, for telling the model."""

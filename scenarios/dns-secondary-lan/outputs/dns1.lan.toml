@@ -72,3 +72,41 @@ tcp   LISTEN 0      128          0.0.0.0:22        0.0.0.0:*     users:(("sshd",
 [[command]]
 argv = ["uptime"]
 stdout = " 13:11:02 up 19 days,  7:08,  1 user,  load average: 0.02, 0.03, 0.00\n"
+
+[[command]]
+argv = ["systemctl", "list-units", "--type", "service"]
+stdout = """
+  UNIT                      LOAD   ACTIVE SUB     DESCRIPTION
+  cron.service              loaded active running Regular background program processing daemon
+  dbus.service              loaded active running D-Bus System Message Bus
+  primary-dns.service       loaded active running Filtering DNS resolver
+  ssh.service               loaded active running OpenBSD Secure Shell server
+  systemd-journald.service  loaded active running Journal Service
+  systemd-logind.service    loaded active running User Login Management
+  systemd-networkd.service  loaded active running Network Configuration
+  systemd-timesyncd.service loaded active running Network Time Synchronization
+
+8 loaded units listed.
+"""
+
+[[command]]
+argv = ["systemctl", "status", "named"]
+exit_code = 4
+stdout = "Unit named.service could not be found.\n"
+
+[[command]]
+argv = ["ss", "-lnup"]
+stdout = """
+State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+UNCONN 0      0            0.0.0.0:53        0.0.0.0:*     users:(("primary-dns",pid=402,fd=11))
+UNCONN 0      0          127.0.0.1:323       0.0.0.0:*     users:(("systemd-timesyn",pid=288,fd=7))
+"""
+
+[[command]]
+argv = ["cat", "/etc/os-release"]
+stdout = """
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+ID=debian
+"""
