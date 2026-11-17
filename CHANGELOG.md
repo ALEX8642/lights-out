@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Design
+
+- Decision record 0009: fixes as a table of self-checking scripts with a risk class each, secrets kept
+  with the scripts, approval only by the maintainer with a reachability rule, band-aid monitoring,
+  and drills that score the decision (#10).
+
 ### Changed
 
 - Policy v2: arguments are matched in any order, option values are bound to their options, and
