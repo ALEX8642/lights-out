@@ -1,0 +1,74 @@
+[[command]]
+argv = ["systemctl", "status", "primary-dns.service"]
+stdout = """
+* primary-dns.service - Filtering DNS resolver
+     Loaded: loaded (/etc/systemd/system/primary-dns.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-02-12 06:02:40 UTC; 2 weeks 5 days ago
+   Main PID: 402 (primary-dns)
+      Tasks: 14 (limit: 4915)
+     Memory: 96.2M
+"""
+
+[[command]]
+argv = ["systemctl", "is-active", "primary-dns.service"]
+stdout = "active\n"
+
+[[command]]
+argv = ["journalctl", "--no-pager", "-n", "50", "-u", "primary-dns.service"]
+stdout = """
+Mar 03 02:14:00 dns1 primary-dns[402]: [info] ratelimit: 10.20.0.0/24 exceeded 20 q/s, dropping 23 queries
+Mar 03 02:14:01 dns1 primary-dns[402]: [info] ratelimit: 10.20.0.0/24 back under limit
+Mar 03 09:41:00 dns1 primary-dns[402]: [info] ratelimit: 10.20.0.0/24 exceeded 20 q/s, dropping 31 queries
+Mar 03 09:41:30 dns1 primary-dns[402]: [info] ratelimit: 10.20.0.0/24 exceeded 20 q/s, dropping 8 queries
+Mar 03 09:41:31 dns1 primary-dns[402]: [info] ratelimit: 10.20.0.0/24 back under limit
+Mar 03 13:02:00 dns1 primary-dns[402]: [info] ratelimit: 10.20.0.0/24 exceeded 20 q/s, dropping 19 queries
+Mar 03 13:02:01 dns1 primary-dns[402]: [info] ratelimit: 10.20.0.0/24 back under limit
+"""
+
+[[command]]
+argv = ["dig", "nas.lan", "@127.0.0.1"]
+stdout = """
+
+; <<>> DiG 9.18.33 <<>> nas.lan @127.0.0.1
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 7745
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; QUESTION SECTION:
+;nas.lan.                       IN      A
+
+;; ANSWER SECTION:
+nas.lan.                10      IN      A       10.20.0.50
+
+;; Query time: 0 msec
+;; SERVER: 127.0.0.1#53(127.0.0.1) (UDP)
+;; MSG SIZE  rcvd: 52
+"""
+
+[[command]]
+argv = ["cat", "/etc/hosts"]
+stdout = """
+127.0.0.1       localhost
+10.20.0.3       dns1.lan dns1
+"""
+
+[[command]]
+argv = ["cat", "/etc/resolv.conf"]
+stdout = """
+nameserver 127.0.0.1
+"""
+
+[[command]]
+argv = ["ss", "-tulpn"]
+stdout = """
+Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+udp   UNCONN 0      0            0.0.0.0:53        0.0.0.0:*     users:(("primary-dns",pid=402,fd=11))
+tcp   LISTEN 0      4096         0.0.0.0:53        0.0.0.0:*     users:(("primary-dns",pid=402,fd=12))
+tcp   LISTEN 0      4096         0.0.0.0:80        0.0.0.0:*     users:(("primary-dns",pid=402,fd=14))
+tcp   LISTEN 0      128          0.0.0.0:22        0.0.0.0:*     users:(("sshd",pid=311,fd=3))
+"""
+
+[[command]]
+argv = ["uptime"]
+stdout = " 13:11:02 up 19 days,  7:08,  1 user,  load average: 0.02, 0.03, 0.00\n"

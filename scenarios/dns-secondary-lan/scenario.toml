@@ -1,0 +1,23 @@
+id = "dns-secondary-lan"
+title = "Local names fail now and then"
+briefing = """
+The monitor on mon.lan has been raising alerts like "getaddrinfo ENOTFOUND nas.lan" a few times \
+a day. Each one clears by itself within a minute or two. Names on the internet have not been \
+affected. Nothing was changed on the network this week.
+
+Clients are given two DNS servers: dns1.lan (10.20.0.3) first and gw.lan (10.20.0.1) second.
+
+Find out why local names fail.
+"""
+
+[[hosts]]
+name = "mon.lan"
+role = "linux"
+
+[[hosts]]
+name = "dns1.lan"
+role = "dns"
+
+[[hosts]]
+name = "gw.lan"
+role = "firewall"
