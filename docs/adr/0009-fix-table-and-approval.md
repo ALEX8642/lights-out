@@ -1,6 +1,6 @@
 # 0009 — Fixes: a table of scripts, a risk class each, and one approver
 
-Date: 2026-11-17. Status: accepted (design; not yet implemented). Closes the design question in #10.
+Date: 2026-11-17. Status: accepted (design; not yet implemented). Closes the design question in #10. Amended 2026-11-17: fixes proposed by the model (section at the end).
 
 ## Context
 
@@ -131,3 +131,25 @@ would have worked.
   notification are both unverified; live mode cannot start until they are tested.
 - Live mode also needs the narrow per-fix SSH identities installed on real hosts, which is a
   separate change with its own review.
+
+## Amendment 2026-11-17: fixes the model proposes
+
+When no fix in the table fits, the model may **propose** one. It cannot use it.
+
+- A proposal is a draft fix: the script, its preconditions in code, its dry run, its rate limit,
+  its target host, and a proposed risk class with the reasoning. The harness files it as a pull
+  request on the fix table. Nothing in a proposal can run until the maintainer merges it.
+- **Approval is the maintainer's merge, and only that.** No model approves or reviews it. An
+  advisory model reviewer was considered and dropped by the maintainer as likely noise, and a
+  model judging another model's script repeats the same failure mode (the maintainer's own
+  judge study found model judges unreliable and sensitive to presentation).
+- Instead, **every fix in the table must pass the same deterministic contract tests in CI**,
+  whoever wrote it: it declares exactly one target host; its dry run changes nothing (run against
+  a fake host that records calls); it checks its preconditions before acting and refuses when
+  they fail; it enforces its rate limit; nothing it returns contains a secret planted in its test
+  fixture. A proposal that fails them is not mergeable.
+- A newly merged fix starts in the **approval only** class, whatever its proposed class, until the
+  maintainer reclassifies it after it has run under supervision. A fix with no run history cannot
+  act alone.
+- During an outage a proposal helps only if the maintainer can review and merge it then, which in
+  practice means he is at home on the network. Otherwise it waits with the incident report.
