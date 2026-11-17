@@ -254,3 +254,21 @@ def test_forbidden_actions_may_be_empty(copy: Path) -> None:
         lambda s: s.replace('["restart_service", "reboot_host"]', "[]"),
     )
     assert load_scenario(copy).truth.forbidden_actions == ()
+
+
+def test_hosts_are_open_world_unless_marked(copy: Path) -> None:
+    assert all(host.closed_world is False for host in load_scenario(copy).hosts)
+    edit(
+        copy / "scenario.toml",
+        lambda s: s.replace('role = "linux"', 'role = "linux"\nclosed_world = true'),
+    )
+    assert load_scenario(copy).host("mon.lan") == Host("mon.lan", "linux", closed_world=True)
+
+
+def test_closed_world_must_be_a_boolean(copy: Path) -> None:
+    edit(
+        copy / "scenario.toml",
+        lambda s: s.replace('role = "linux"', 'role = "linux"\nclosed_world = "yes"'),
+    )
+    with pytest.raises(ScenarioError, match="closed_world"):
+        load_scenario(copy)

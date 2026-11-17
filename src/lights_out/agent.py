@@ -399,6 +399,7 @@ def _run(
         exit_code=result.exit_code,
         stdout=result.stdout,
         recorded=result.recorded,
+        matched=result.matched,
     )
     return f"exit code {result.exit_code}\n{result.stdout}", False
 

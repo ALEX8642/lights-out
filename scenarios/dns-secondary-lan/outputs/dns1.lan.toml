@@ -110,3 +110,39 @@ NAME="Debian GNU/Linux"
 VERSION_ID="12"
 ID=debian
 """
+
+[[command]]
+argv = ["ps", "aux"]
+stdout = """
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root           1  0.0  0.3 168512 12160 ?        Ss   Feb12   0:41 /sbin/init
+root         288  0.0  0.1  90116  6012 ?        Ssl  Feb12   0:09 /lib/systemd/systemd-timesyncd
+root         311  0.0  0.2  15432  9140 ?        Ss   Feb12   0:00 sshd: /usr/sbin/sshd -D
+root         402  1.2  2.4 1325400 98512 ?       Ssl  Feb12 342:10 /opt/primary-dns/primary-dns -c /opt/primary-dns/config.yaml
+"""
+
+[[command]]
+argv = ["cat", "/etc/nsswitch.conf"]
+stdout = """
+passwd:         files
+group:          files
+hosts:          files dns
+"""
+
+[[command]]
+argv = ["cat", "/opt/primary-dns/config.yaml"]
+stdout = """
+dns:
+  bind_hosts: [0.0.0.0]
+  port: 53
+  upstream_dns: [https://dns.quad9.example/dns-query]
+  ratelimit: 20
+  ratelimit_subnet_len_ipv4: 24
+  refuse_any: true
+filtering:
+  rewrites:
+    - domain: '*.lan'
+      answer: 10.20.0.50
+    - domain: nas.lan
+      answer: 10.20.0.50
+"""

@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from lights_out.scenario import Scenario
+from lights_out.targets import same_question
 from lights_out.transcript import Event
 
 
@@ -81,7 +82,11 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
     evidence_run = tuple(
         fact.id
         for fact in with_evidence
-        if fact.evidence is not None and (fact.evidence[0], tuple(fact.evidence[1].split())) in ran
+        if fact.evidence is not None
+        and any(
+            host == fact.evidence[0] and same_question(argv, tuple(fact.evidence[1].split()))
+            for host, argv in ran
+        )
     )
 
     usage = [event.data for event in events if event.kind == "usage"]
