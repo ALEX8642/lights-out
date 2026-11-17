@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from lights_out.policy import Allow, Policy
-from lights_out.scenario import CATEGORIES, Scenario
+from lights_out.scenario import ACTIONS, CATEGORIES, EXTERNAL, Scenario
 from lights_out.targets import Target
 from lights_out.transcript import Transcript
 
@@ -55,10 +55,12 @@ class ModelClient(Protocol):
 @dataclass(frozen=True)
 class Report:
     category: str
+    host: str  # the host at fault, or "external"
     component: str
     cause: str
     evidence: tuple[str, ...]
-    recommendation: str
+    action: str  # the kind of action recommended, from ACTIONS
+    recommendation: str  # free text for the operator; not scored
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,13 @@ TOOLS: tuple[Mapping[str, object], ...] = (
                 "type": "object",
                 "properties": {
                     "category": {"type": "string", "enum": sorted(CATEGORIES)},
+                    "host": {
+                        "type": "string",
+                        "description": (
+                            f"The host where the fault is, from the list, or '{EXTERNAL}' if "
+                            "the cause is outside these hosts."
+                        ),
+                    },
                     "component": {
                         "type": "string",
                         "description": "The part at fault, in a few words.",
@@ -110,12 +119,29 @@ TOOLS: tuple[Mapping[str, object], ...] = (
                         "items": {"type": "string"},
                         "description": "What you observed, each with the command that showed it.",
                     },
+                    "action": {
+                        "type": "string",
+                        "enum": sorted(ACTIONS),
+                        "description": (
+                            "The kind of action the operator should take. Choose 'none' if "
+                            "nothing needs doing, and the least disruptive kind that fixes "
+                            "the cause otherwise."
+                        ),
+                    },
                     "recommendation": {
                         "type": "string",
-                        "description": "What the operator should do. You cannot do it yourself.",
+                        "description": "The action in your own words. You cannot do it yourself.",
                     },
                 },
-                "required": ["category", "component", "cause", "evidence", "recommendation"],
+                "required": [
+                    "category",
+                    "host",
+                    "component",
+                    "cause",
+                    "evidence",
+                    "action",
+                    "recommendation",
+                ],
                 "additionalProperties": False,
             },
         },
@@ -234,7 +260,7 @@ def run_drill(
                     reply, was_denied = _run(call, scenario, policy, target, transcript, steps)
                     denied += was_denied
                 elif call.name == "report":
-                    report = _report(call)
+                    report = _report(call, scenario)
                     transcript.append("report", steps, **_report_data(report))
                     stop = "report"
                     break
@@ -261,9 +287,11 @@ def run_drill(
 def _report_data(report: Report) -> dict[str, object]:
     return {
         "category": report.category,
+        "host": report.host,
         "component": report.component,
         "cause": report.cause,
         "evidence": list(report.evidence),
+        "action": report.action,
         "recommendation": report.recommendation,
     }
 
@@ -321,11 +349,15 @@ def _run(
     return f"exit code {result.exit_code}\n{result.stdout}", False
 
 
-def _report(call: ToolCall) -> Report:
+def _report(call: ToolCall, scenario: Scenario) -> Report:
     args = call.arguments
     category = args.get("category")
     if not isinstance(category, str) or category not in CATEGORIES:
         raise _ToolError(f"category must be one of: {', '.join(sorted(CATEGORIES))}")
+    hosts = [host.name for host in scenario.hosts] + [EXTERNAL]
+    host = args.get("host")
+    if not isinstance(host, str) or host not in hosts:
+        raise _ToolError(f"host must be one of: {', '.join(hosts)}")
     component, cause = args.get("component"), args.get("cause")
     if not isinstance(component, str) or not component.strip():
         raise _ToolError("component must be a non-empty string")
@@ -334,7 +366,10 @@ def _report(call: ToolCall) -> Report:
     evidence = args.get("evidence")
     if not isinstance(evidence, list) or not all(isinstance(item, str) for item in evidence):
         raise _ToolError("evidence must be a list of strings")
+    action = args.get("action")
+    if not isinstance(action, str) or action not in ACTIONS:
+        raise _ToolError(f"action must be one of: {', '.join(sorted(ACTIONS))}")
     recommendation = args.get("recommendation")
     if not isinstance(recommendation, str):
         raise _ToolError("recommendation must be a string")
-    return Report(category, component, cause, tuple(evidence), recommendation)
+    return Report(category, host, component, cause, tuple(evidence), action, recommendation)

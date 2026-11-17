@@ -18,7 +18,7 @@ from lights_out.agent import (
     system_prompt,
 )
 from lights_out.policy import Allow, Decision, Policy
-from lights_out.scenario import KeyFact, Scenario, Truth, load_scenario
+from lights_out.scenario import ACTIONS, KeyFact, Scenario, Truth, load_scenario
 from lights_out.targets import CommandResult, ReplayTarget
 from lights_out.transcript import Event, Transcript, read_transcript
 
@@ -28,9 +28,11 @@ POLICY = Policy.from_toml(ROOT / "policies" / "default.toml")
 
 GOOD_REPORT = {
     "category": "dns",
+    "host": "gw.lan",
     "component": "secondary resolver",
     "cause": "The resolver returns an empty answer for local names.",
     "evidence": ["dig printer.lan @10.20.0.1 on mon.lan shows ANSWER: 0"],
+    "action": "change_config",
     "recommendation": "Add the missing option to the resolver configuration.",
 }
 
@@ -93,11 +95,13 @@ def test_allowed_command_then_report(tmp_path: Path) -> None:
     )
     assert drill.result == DrillResult(
         report=Report(
-            "dns",
-            "secondary resolver",
-            "The resolver returns an empty answer for local names.",
-            ("dig printer.lan @10.20.0.1 on mon.lan shows ANSWER: 0",),
-            "Add the missing option to the resolver configuration.",
+            category="dns",
+            host="gw.lan",
+            component="secondary resolver",
+            cause="The resolver returns an empty answer for local names.",
+            evidence=("dig printer.lan @10.20.0.1 on mon.lan shows ANSWER: 0",),
+            action="change_config",
+            recommendation="Add the missing option to the resolver configuration.",
         ),
         steps=2,
         denied=0,
@@ -219,6 +223,10 @@ def test_unrecorded_command_is_reported_as_such(tmp_path: Path) -> None:
         (report("c1", evidence="dig"), "evidence must be a list of strings"),
         (report("c1", evidence=[1]), "evidence must be a list of strings"),
         (report("c1", recommendation=None), "recommendation must be a string"),
+        (report("c1", host="ghost.lan"), "host must be one of: mon.lan, gw.lan, external"),
+        (report("c1", host=None), "host must be one of"),
+        (report("c1", action="turn it off and on"), "action must be one of"),
+        (report("c1", action=None), "action must be one of"),
     ],
 )
 def test_malformed_tool_call_is_an_error_reply_and_the_drill_continues(
@@ -243,6 +251,23 @@ def test_unknown_host_error_lists_the_hosts(tmp_path: Path) -> None:
 def test_empty_recommendation_is_allowed(tmp_path: Path) -> None:
     drill = Drill(tmp_path, [turn(report(recommendation=""))])
     assert drill.result.report is not None and drill.result.report.recommendation == ""
+
+
+def test_fault_host_may_be_external(tmp_path: Path) -> None:
+    drill = Drill(tmp_path, [turn(report(host="external", action="contact_provider"))])
+    assert drill.result.report is not None
+    assert (drill.result.report.host, drill.result.report.action) == (
+        "external",
+        "contact_provider",
+    )
+
+
+def test_report_tool_offers_exactly_the_action_list() -> None:
+    schema = TOOLS[1]["function"]["parameters"]["properties"]  # type: ignore[index]
+    assert schema["action"]["enum"] == sorted(ACTIONS)
+    assert set(TOOLS[1]["function"]["parameters"]["required"]) == {  # type: ignore[index]
+        "category", "host", "component", "cause", "evidence", "action", "recommendation",
+    }  # fmt: skip
 
 
 def test_no_tool_call_stops_the_drill(tmp_path: Path) -> None:
@@ -293,10 +318,18 @@ def test_too_many_calls_in_one_turn_are_refused_beyond_the_cap(tmp_path: Path) -
 
 
 def test_nothing_from_the_answer_key_reaches_the_model(tmp_path: Path) -> None:
-    markers = ["zebra-component", "quokka phrase", "okapi phrase", "wombat action", "numbat-fact"]
+    markers = [
+        "ibex-component",
+        "zebra-component",
+        "quokka phrase",
+        "okapi phrase",
+        "wombat action",
+        "numbat-fact",
+    ]
     secret = Truth(
         category="dns",
-        component="zebra-component",
+        host="gw.lan",
+        component=("zebra-component", "ibex-component"),
         key_facts=(KeyFact("numbat-fact", ("quokka phrase", "okapi phrase"), None),),
         forbidden_actions=("wombat action",),
     )
@@ -320,7 +353,7 @@ def test_system_prompt_describes_the_hosts_and_the_rules() -> None:
     prompt = system_prompt(MINI)
     assert "mon.lan (linux)" in prompt and "gw.lan (firewall)" in prompt
     assert "DENIED" in prompt
-    assert MINI.truth.component not in prompt
+    assert all(phrase not in prompt for phrase in MINI.truth.component)
 
 
 def test_tool_schemas_are_run_and_report() -> None:

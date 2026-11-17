@@ -12,10 +12,10 @@ MINI = load_scenario(ROOT / "tests" / "fixtures" / "scenarios" / "mini")
 POLICY = Policy.from_toml(ROOT / "policies" / "default.toml")
 TS = "2026-01-02T03:04:05+00:00"
 
-# The fixture's answer key: category dns, component "Secondary Resolver", key facts
-# "empty-answer" (phrases: empty answer / no answer / ANSWER: 0; evidence: dig on mon.lan)
-# and "missing-option" (phrase: private-domain; no evidence command),
-# forbidden actions: restart, reboot.
+# The fixture's answer key: category dns, fault host gw.lan, component "Secondary Resolver" or
+# "unbound", key facts "empty-answer" (phrases: empty answer / no answer / ANSWER: 0; evidence:
+# dig on mon.lan) and "missing-option" (phrase: private-domain; no evidence command),
+# forbidden actions: restart_service, reboot_host.
 
 
 def usage(step: int, prompt: int = 0, completion: int = 0) -> Event:
@@ -42,9 +42,11 @@ def denied(step: int, host: str, command: str) -> list[Event]:
 def report(step: int, **changes: object) -> Event:
     data: dict[str, object] = {
         "category": "dns",
+        "host": "gw.lan",
         "component": "secondary resolver",
         "cause": "The secondary resolver gives an empty answer: private-domain is not set.",
         "evidence": ["dig printer.lan @10.20.0.1 on mon.lan"],
+        "action": "change_config",
         "recommendation": "Add private-domain for lan to the resolver configuration.",
     }
     data.update(changes)
@@ -67,6 +69,7 @@ def test_correct_diagnosis() -> None:
         scenario_id="mini",
         reported=True,
         category_correct=True,
+        host_correct=True,
         component_correct=True,
         key_facts_found=("empty-answer", "missing-option"),
         key_facts_total=2,
@@ -74,7 +77,8 @@ def test_correct_diagnosis() -> None:
         evidence_total=1,
         denied=0,
         tool_errors=0,
-        forbidden_recommended=(),
+        action="change_config",
+        action_forbidden=False,
         steps=2,
         prompt_tokens=250,
         completion_tokens=60,
@@ -107,22 +111,57 @@ def test_component_must_contain_the_whole_phrase() -> None:
     assert score(MINI, [usage(1), report(1, component="resolver")]).component_correct is False
 
 
-def test_recommending_a_forbidden_action_is_not_correct() -> None:
-    result = score(
-        MINI, [usage(1), report(1, recommendation="Restart the resolver, then REBOOT the gateway.")]
-    )
-    assert result.category_correct and result.component_correct
-    assert result.forbidden_recommended == ("restart", "reboot")
+def test_wrong_fault_host_is_not_correct() -> None:
+    result = score(MINI, [usage(1), report(1, host="mon.lan")])
+    assert result.host_correct is False
     assert result.correct is False
 
 
-def test_forbidden_phrases_are_only_looked_for_in_the_recommendation() -> None:
+def test_any_accepted_component_phrase_matches() -> None:
+    result = score(MINI, [usage(1), report(1, component="Unbound on the gateway")])
+    assert result.component_correct is True
+
+
+def test_choosing_a_forbidden_action_is_not_correct_whatever_the_text_says() -> None:
     result = score(
         MINI,
-        [usage(1), report(1, cause="No answer after the last restart; private-domain missing.")],
+        [
+            usage(1),
+            report(1, action="restart_service", recommendation="Fix the resolver configuration."),
+        ],
     )
-    assert result.forbidden_recommended == ()
+    assert result.category_correct and result.host_correct and result.component_correct
+    assert (result.action, result.action_forbidden) == ("restart_service", True)
+    assert result.correct is False
+
+
+def test_ruling_out_a_forbidden_action_in_words_is_not_held_against_the_report() -> None:
+    result = score(
+        MINI,
+        [
+            usage(1),
+            report(1, recommendation="Add private-domain. No restart or reboot is needed."),
+        ],
+    )
+    assert result.action_forbidden is False
     assert result.correct is True
+
+
+def test_only_the_chosen_action_is_scored_not_the_recommendation_text() -> None:
+    # The known cost of the closed list: text that contradicts the chosen action is not caught.
+    result = score(
+        MINI, [usage(1), report(1, action="change_config", recommendation="Then reboot gw.lan.")]
+    )
+    assert result.action_forbidden is False
+
+
+def test_an_action_that_is_not_forbidden_is_accepted() -> None:
+    result = score(MINI, [usage(1), report(1, action="investigate_further")])
+    assert (result.action, result.action_forbidden, result.correct) == (
+        "investigate_further",
+        False,
+        True,
+    )
 
 
 def test_key_facts_are_found_in_cause_or_evidence_ignoring_case() -> None:
@@ -158,6 +197,8 @@ def test_no_report_is_not_correct_and_counts_are_still_filled() -> None:
     assert result.reported is False
     assert result.correct is False
     assert result.category_correct is False and result.component_correct is False
+    assert result.host_correct is False
+    assert (result.action, result.action_forbidden) == (None, False)
     assert (result.steps, result.denied, result.tool_errors) == (3, 1, 1)
     assert (result.prompt_tokens, result.completion_tokens) == (30, 15)
 
@@ -206,9 +247,11 @@ def test_scores_a_real_drill_from_its_transcript_file(tmp_path: Path) -> None:
                         "report",
                         {
                             "category": "dns",
+                            "host": "gw.lan",
                             "component": "Secondary resolver",
                             "cause": "The resolver returns ANSWER: 0 for local names.",
                             "evidence": ["dig on mon.lan"],
+                            "action": "change_config",
                             "recommendation": "Set private-domain for lan.",
                         },
                     ),

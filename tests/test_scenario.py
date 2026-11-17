@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from lights_out.scenario import (
+    ACTIONS,
     CATEGORIES,
+    EXTERNAL,
     Host,
     KeyFact,
     Recording,
@@ -55,8 +57,9 @@ def test_exit_code_defaults_to_zero() -> None:
 def test_truth() -> None:
     truth = load_scenario(MINI).truth
     assert truth.category == "dns"
-    assert truth.component == "Secondary Resolver"
-    assert truth.forbidden_actions == ("restart", "reboot")
+    assert truth.host == "gw.lan"
+    assert truth.component == ("Secondary Resolver", "unbound")
+    assert truth.forbidden_actions == ("restart_service", "reboot_host")
     assert truth.key_facts == (
         KeyFact(
             "empty-answer",
@@ -196,3 +199,57 @@ def test_unknown_key_is_rejected(copy: Path) -> None:
     edit(copy / "scenario.toml", lambda s: 'difficulty = "hard"\n' + s)
     with pytest.raises(ScenarioError, match=r"scenario\.toml.*difficulty"):
         load_scenario(copy)
+
+
+def test_actions_are_a_closed_set() -> None:
+    assert {"none", "change_config", "restart_service", "reboot_host"} <= ACTIONS
+    assert len(ACTIONS) == 7
+
+
+def test_fault_host_may_be_external(copy: Path) -> None:
+    edit(copy / "truth.toml", lambda s: s.replace('host = "gw.lan"', f'host = "{EXTERNAL}"', 1))
+    assert load_scenario(copy).truth.host == "external"
+
+
+def test_fault_host_must_be_a_scenario_host(copy: Path) -> None:
+    edit(copy / "truth.toml", lambda s: s.replace('host = "gw.lan"', 'host = "ghost.lan"', 1))
+    with pytest.raises(ScenarioError, match=r"truth\.toml.*unknown host: ghost\.lan"):
+        load_scenario(copy)
+
+
+def test_fault_host_is_required(copy: Path) -> None:
+    edit(copy / "truth.toml", lambda s: s.replace('host = "gw.lan"\n', "", 1))
+    with pytest.raises(ScenarioError, match=r"truth\.toml.*host"):
+        load_scenario(copy)
+
+
+def test_no_scenario_host_may_be_called_external(copy: Path) -> None:
+    edit(copy / "scenario.toml", lambda s: s.replace('name = "mon.lan"', 'name = "external"'))
+    with pytest.raises(ScenarioError, match="reserved"):
+        load_scenario(copy)
+
+
+@pytest.mark.parametrize("value", ['"Secondary Resolver"', "[]", '[""]', "[1]"])
+def test_component_must_be_a_list_of_phrases(copy: Path, value: str) -> None:
+    edit(
+        copy / "truth.toml",
+        lambda s: s.replace(
+            'component = ["Secondary Resolver", "unbound"]', f"component = {value}"
+        ),
+    )
+    with pytest.raises(ScenarioError, match=r"truth\.toml.*component"):
+        load_scenario(copy)
+
+
+def test_forbidden_actions_must_come_from_the_action_list(copy: Path) -> None:
+    edit(copy / "truth.toml", lambda s: s.replace('"reboot_host"', '"turn it off and on"'))
+    with pytest.raises(ScenarioError, match=r"truth\.toml.*forbidden_actions.*turn it off and on"):
+        load_scenario(copy)
+
+
+def test_forbidden_actions_may_be_empty(copy: Path) -> None:
+    edit(
+        copy / "truth.toml",
+        lambda s: s.replace('["restart_service", "reboot_host"]', "[]"),
+    )
+    assert load_scenario(copy).truth.forbidden_actions == ()

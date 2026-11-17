@@ -1,6 +1,6 @@
 # 0005 — Scoring: what counts as a correct diagnosis
 
-Date: 2026-11-16. Status: accepted.
+Date: 2026-11-16. Status: accepted, amended by [0006](0006-structured-report.md): the fault host is now compared exactly, the component against a list of phrases, and forbidden actions by the chosen action rather than by phrases in the recommendation.
 
 ## Context
 

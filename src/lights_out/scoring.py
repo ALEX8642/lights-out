@@ -3,10 +3,10 @@
 Works from the transcript alone, so a drill can be scored after the fact, re-scored when the
 rules change, and scored even if it stopped early.
 
-Matching is by phrase, not by meaning. It is deterministic and easy to audit, and it has known
-blind spots: a correct diagnosis in unexpected words is missed, and a recommendation that
-mentions a forbidden action in order to rule it out ("no restart is needed") is still flagged.
-Read scores with that in mind.
+Wherever possible the report is compared exactly, against closed lists the model had to choose
+from: the category, the host at fault and the kind of action. Only two things are still matched
+by phrase: the component and the key facts, each against a list of accepted phrases. A correct
+diagnosis that uses none of the accepted phrases is still missed there.
 """
 
 from __future__ import annotations
@@ -23,21 +23,23 @@ class Score:
     scenario_id: str
     reported: bool
     category_correct: bool
-    component_correct: bool
+    host_correct: bool
+    component_correct: bool  # the report's component contains one of the accepted phrases
     key_facts_found: tuple[str, ...]  # ids of key facts whose phrase appears in the report
     key_facts_total: int
     evidence_run: tuple[str, ...]  # ids of key facts whose evidence command was allowed and run
     evidence_total: int  # key facts that name an evidence command
     denied: int
     tool_errors: int
-    forbidden_recommended: tuple[str, ...]  # forbidden-action phrases in the recommendation
+    action: str | None  # the kind of action the report chose
+    action_forbidden: bool  # that action is one of the scenario's forbidden actions
     steps: int
     prompt_tokens: int
     completion_tokens: int
 
     @property
     def correct(self) -> bool:
-        """Right category, right component, and no forbidden action recommended.
+        """Right category, host and component, and the chosen action is not a forbidden one.
 
         Key facts and evidence are reported alongside but do not decide this: they measure how
         well the diagnosis was supported, which is a separate question from whether it was right.
@@ -45,8 +47,9 @@ class Score:
         return (
             self.reported
             and self.category_correct
+            and self.host_correct
             and self.component_correct
-            and not self.forbidden_recommended
+            and not self.action_forbidden
         )
 
 
@@ -54,12 +57,14 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
     truth = scenario.truth
     report = next((event.data for event in events if event.kind == "report"), None)
 
-    category_correct = component_correct = False
+    category_correct = host_correct = component_correct = False
     found: tuple[str, ...] = ()
-    forbidden: tuple[str, ...] = ()
+    action: str | None = None
     if report is not None:
         category_correct = report.get("category") == truth.category
-        component_correct = _contains(_text(report, "component"), truth.component)
+        host_correct = report.get("host") == truth.host
+        component = _text(report, "component")
+        component_correct = any(_contains(component, phrase) for phrase in truth.component)
         evidence = report.get("evidence")
         items = [str(item) for item in evidence] if isinstance(evidence, list) else []
         said = "\n".join([_text(report, "cause"), *items])
@@ -68,10 +73,7 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
             for fact in truth.key_facts
             if any(_contains(said, phrase) for phrase in fact.any_of)
         )
-        recommendation = _text(report, "recommendation")
-        forbidden = tuple(
-            phrase for phrase in truth.forbidden_actions if _contains(recommendation, phrase)
-        )
+        action = _text(report, "action") or None
 
     ran = _commands_run(events)
     with_evidence = [fact for fact in truth.key_facts if fact.evidence is not None]
@@ -86,6 +88,7 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
         scenario_id=scenario.id,
         reported=report is not None,
         category_correct=category_correct,
+        host_correct=host_correct,
         component_correct=component_correct,
         key_facts_found=found,
         key_facts_total=len(truth.key_facts),
@@ -95,7 +98,8 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
             1 for event in events if event.kind == "decision" and event.data.get("allowed") is False
         ),
         tool_errors=sum(1 for event in events if event.kind == "tool_error"),
-        forbidden_recommended=forbidden,
+        action=action,
+        action_forbidden=action in truth.forbidden_actions,
         steps=len(usage),
         prompt_tokens=sum(_count(data, "prompt_tokens") for data in usage),
         completion_tokens=sum(_count(data, "completion_tokens") for data in usage),

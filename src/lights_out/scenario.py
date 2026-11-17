@@ -4,7 +4,7 @@ A scenario is a directory:
 
     scenario.toml         title, briefing shown to the agent, hosts and their roles
     outputs/<host>.toml   recorded output of commands on that host
-    truth.toml            root cause, key facts and traps; never shown to the agent
+    truth.toml            fault host, cause, key facts and traps; never shown to the agent
 
 The format is described in docs/adr/0003-scenario-format.md.
 """
@@ -19,6 +19,23 @@ from pathlib import Path
 CATEGORIES = frozenset(
     {"dns", "routing", "dhcp", "wan", "service", "hardware", "config", "monitoring"}
 )
+
+# The kinds of action a report can recommend. A closed list, so that a recommendation is a
+# choice that can be compared exactly instead of prose that has to be interpreted.
+ACTIONS = frozenset(
+    {
+        "none",  # nothing to do: it heals by itself, or is not a fault
+        "change_config",
+        "restart_service",
+        "reboot_host",
+        "replace_hardware",
+        "contact_provider",  # the fault is outside the network, for example the ISP
+        "investigate_further",  # the evidence available does not settle it
+    }
+)
+
+EXTERNAL = "external"
+"""The fault host when the cause is not on any host in the scenario."""
 
 
 class ScenarioError(ValueError):
@@ -57,9 +74,10 @@ class Truth:
     """The answer key. Never shown to the agent."""
 
     category: str
-    component: str
+    host: str  # the host at fault, or EXTERNAL
+    component: tuple[str, ...]  # accepted phrases for the part at fault
     key_facts: tuple[KeyFact, ...]
-    forbidden_actions: tuple[str, ...]
+    forbidden_actions: tuple[str, ...]  # entries of ACTIONS that are the scenario's trap
 
 
 @dataclass(frozen=True)
@@ -159,6 +177,8 @@ def _hosts(value: object, where: str) -> tuple[Host, ...]:
     for table in _tables(value, "hosts", where):
         _only_keys(table, {"name", "role"}, f"{where}: hosts")
         host = Host(_text(table, "name", where), _text(table, "role", where))
+        if host.name == EXTERNAL:
+            raise ScenarioError(f"{where}: host name {EXTERNAL!r} is reserved")
         if any(host.name == other.name for other in hosts):
             raise ScenarioError(f"{where}: duplicate host: {host.name}")
         hosts.append(host)
@@ -183,11 +203,20 @@ def _recordings(data: Mapping[str, object], where: str) -> list[tuple[tuple[str,
 
 def _truth(data: Mapping[str, object], hosts: set[str]) -> Truth:
     where = "truth.toml"
-    _only_keys(data, {"category", "component", "forbidden_actions", "key_facts"}, where)
+    _only_keys(data, {"category", "host", "component", "forbidden_actions", "key_facts"}, where)
     category = _text(data, "category", where)
     if category not in CATEGORIES:
         raise ScenarioError(
             f"{where}: category {category!r} is not one of {', '.join(sorted(CATEGORIES))}"
+        )
+    fault_host = _text(data, "host", where)
+    if fault_host != EXTERNAL and fault_host not in hosts:
+        raise ScenarioError(f"{where}: host: unknown host: {fault_host}")
+    forbidden = _texts(data, "forbidden_actions", where, allow_empty=True)
+    unknown = [action for action in forbidden if action not in ACTIONS]
+    if unknown:
+        raise ScenarioError(
+            f"{where}: forbidden_actions: {', '.join(unknown)} not in {', '.join(sorted(ACTIONS))}"
         )
     facts: list[KeyFact] = []
     for table in _tables(data.get("key_facts"), "key_facts", where):
@@ -207,7 +236,8 @@ def _truth(data: Mapping[str, object], hosts: set[str]) -> Truth:
         facts.append(KeyFact(fact_id, _texts(table, "any_of", where, allow_empty=False), pair))
     return Truth(
         category=category,
-        component=_text(data, "component", where),
+        host=fault_host,
+        component=_texts(data, "component", where, allow_empty=False),
         key_facts=tuple(facts),
-        forbidden_actions=_texts(data, "forbidden_actions", where, allow_empty=True),
+        forbidden_actions=forbidden,
     )
