@@ -333,9 +333,13 @@ def _run(
     transcript.append("proposal", step, host=host.name, command=command)
     decision = policy.check(host.role, command)
     if not isinstance(decision, Allow):
-        transcript.append("decision", step, allowed=False, argv=None, reason=decision.reason)
+        transcript.append(
+            "decision", step, allowed=False, argv=None, reason=decision.reason, denial=decision.kind
+        )
         return f"DENIED: {decision.reason}", True
-    transcript.append("decision", step, allowed=True, argv=list(decision.argv), reason=None)
+    transcript.append(
+        "decision", step, allowed=True, argv=list(decision.argv), reason=None, denial=None
+    )
 
     # The only place a command reaches a target, and only as the argument list just approved.
     result = target.run(host.name, decision.argv)

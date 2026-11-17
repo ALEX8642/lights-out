@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Policy v2: arguments are matched in any order, option values are bound to their options, and
+  every refusal is classed as **unsafe** (state change, protected file, another program, shell
+  injection) or **unlisted** (harmless but not offered). Unlisted refusals carry the program's
+  usage line. The default policy now allows broad read-only diagnosis on Linux and BSD hosts.
+  Scores report `denied_unsafe` and `denied_unlisted` instead of `denied` (#20).
+
 ## [0.1.0] - 2026-11-16
 
 First release. The guardrail, incident replay and scoring work end to end with a scripted

@@ -47,7 +47,8 @@ def test_drill_then_score_the_bundled_scenario(
         "absent-private-domain",
     ]
     assert result["evidence_run"] == result["key_facts_found"]
-    assert (result["denied"], result["tool_errors"], result["steps"]) == (1, 0, 3)
+    assert (result["denied_unsafe"], result["denied_unlisted"]) == (1, 0)
+    assert (result["tool_errors"], result["steps"]) == (0, 3)
     assert (result["action"], result["action_forbidden"]) == ("change_config", False)
 
 
@@ -62,7 +63,8 @@ def test_score_prints_a_readable_summary(
     assert "dns-secondary-lan: CORRECT" in text
     assert "key facts found   3 of 3" in text
     assert "evidence run      3 of 3" in text
-    assert "denied commands   1" in text
+    assert "refused, unsafe   1" in text
+    assert "refused, unlisted 0" in text
 
 
 def test_a_forbidden_action_scores_as_incorrect_and_exits_1(

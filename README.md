@@ -59,14 +59,15 @@ dns-secondary-lan: CORRECT
   action            change_config
   key facts found   3 of 3
   evidence run      3 of 3
-  denied commands   1
+  refused, unsafe   1
+  refused, unlisted 0
   tool errors       0
   steps             3
   tokens            0 prompt, 0 completion
 ```
 
-The one denied command is in the script on purpose: it asks to read the firewall's full
-configuration file, which can hold credentials, and the policy refuses. `run.jsonl` records every
+The one refused command is in the script on purpose: it asks to read the firewall's full
+configuration file, which can hold credentials, and the policy refuses it as unsafe. `run.jsonl` records every
 proposal, decision and output; open it to see exactly what happened.
 
 The scripted model replays fixed turns from `script.json`. It shows the machinery working; it
@@ -74,10 +75,12 @@ says nothing about how well a real model does.
 
 ## How it works
 
-- **Policy.** The model proposes a command as text. The harness never passes it to a shell. It
-  refuses shell operators, quotes and non-ASCII characters outright, splits the rest on
-  whitespace, and runs it only if the program and its arguments match an allowlist for that
-  host's role. The guardrail is code, not a prompt.
+- **Policy.** The model proposes a command as text. The harness never passes it to a shell. Two
+  layers, both in code: anything that would change state, run another program, read a protected
+  file or use shell syntax is refused as **unsafe**; anything else must match a read-only
+  allowlist for the host's role, with arguments in any order, or it is refused as **unlisted**
+  and the model is told the program's usage. Only unsafe refusals count against the model. The
+  guardrail is code, not a prompt.
 - **Scenarios.** Each scenario is a recorded incident: a briefing, a set of hosts, the output of
   the commands an investigator might run, and a truth file the model never sees. All names and
   addresses are fictional.

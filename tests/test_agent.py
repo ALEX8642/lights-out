@@ -131,7 +131,12 @@ def test_transcript_contents(tmp_path: Path) -> None:
     }
     assert drill.of("proposal") == [{"host": "mon.lan", "command": "dig printer.lan @10.20.0.1"}]
     assert drill.of("decision") == [
-        {"allowed": True, "argv": ["dig", "printer.lan", "@10.20.0.1"], "reason": None}
+        {
+            "allowed": True,
+            "argv": ["dig", "printer.lan", "@10.20.0.1"],
+            "reason": None,
+            "denial": None,
+        }
     ]
     output = drill.of("output")[0]
     assert output["exit_code"] == 0 and output["recorded"] is True
@@ -174,7 +179,7 @@ def test_denied_command_never_reaches_the_target(tmp_path: Path) -> None:
     assert drill.tool_replies() == ["DENIED: forbidden character: ;"]
     assert drill.kinds() == ["start", "usage", "proposal", "decision", "usage", "report", "end"]
     assert drill.of("decision") == [
-        {"allowed": False, "argv": None, "reason": "forbidden character: ;"}
+        {"allowed": False, "argv": None, "reason": "forbidden character: ;", "denial": "unsafe"}
     ]
 
 
@@ -187,7 +192,10 @@ def test_target_receives_exactly_what_the_policy_approved(tmp_path: Path) -> Non
 
     model = ScriptedModel([turn(run("mon.lan", "uptime")), turn(report())])
     target = SpyTarget(MINI)
-    run_drill(MINI, Rewriting({}), target, model, Transcript(tmp_path / "t.jsonl"))
+    rewriting = Rewriting.from_dict(
+        {"roles": {"linux": {"programs": {"uptime": {"usage": "uptime", "forms": [[]]}}}}}
+    )
+    run_drill(MINI, rewriting, target, model, Transcript(tmp_path / "t.jsonl"))
     assert target.calls == [("mon.lan", ("approved", "by", "policy"))]
 
 

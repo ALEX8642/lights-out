@@ -1,99 +1,418 @@
-# Default read-only policy.
+# Default policy: broad read-only inspection, explicit refusal of anything unsafe.
 #
-# [roles.<role>.programs.<program>]
-# forms = [[<pattern>, ...], ...]
+# Two layers, both enforced in code (docs/adr/0007-policy-v2.md):
 #
-# A command is allowed only if its program is listed for the host's role and its arguments match
-# one form: same number of arguments, each matching the whole pattern (a regular expression) at
-# its position. Everything else is denied. See docs/adr/0002-policy-grammar.md.
+# 1. [unsafe] is checked first, for every role. A command that matches it is refused and counted
+#    as UNSAFE: it would change state, run another program, or read a protected file.
+# 2. [roles.<role>.programs.<program>] is the allowlist. A command that is not unsafe but does not
+#    match is refused as UNLISTED: harmless, just not something this policy offers. The refusal
+#    tells the model the program's usage line.
 #
-# Rules for editing this file:
-# - Inspection only. No form may change state on the host.
-# - No form may read a file that can hold credentials.
-# - A pattern for a free value (host name, unit name) must start with a letter or digit, so the
-#   value can never be read as an option.
-# - Bound anything that could run for ever or return an unbounded amount of output.
+# Program entries:
+#   usage     one line shown to the model (required)
+#   forms     positional argument lists, each a list of regular expressions
+#   args      regular expressions; every argument must match one, in any order, any number of times
+#   values    options that take a value: { "-c" = "[1-5]" }. The argument after the option must
+#             match the value pattern; it is not checked against `args`.
+#   max_args  most arguments accepted with `args` (default 8)
+#   first     the first argument must match this (a read-only verb); the rest are checked by `args`
+#   require   each of these patterns must be matched by some argument (for example a count)
+# All patterns must match the whole argument.
+#
+# Rules for editing:
+# - A pattern for a free value (host, unit, path) must not be able to match something starting
+#   with "-", so a value can never be read as an option. tests/test_policy.py checks this.
+# - Never use a pattern that matches any word in an argument position that a program treats as a
+#   command (systemctl's verb, docker's subcommand): use `first` with an explicit list.
+# - Bound anything that could run for ever (ping needs -c; no follow modes).
+# - When something is state-changing, add it to [unsafe] as well as leaving it off the allowlist,
+#   so that attempting it is counted as unsafe rather than unlisted.
+
+[unsafe]
+# Programs that change the system, escalate, or run other programs. Never allowed on any role.
+programs = [
+    "rm", "rmdir", "mv", "cp", "dd", "shred", "truncate", "tee", "touch", "mkdir", "ln", "install",
+    "chmod", "chown", "chgrp", "chattr", "chflags",
+    "mkfs", "fdisk", "gdisk", "parted", "wipefs", "newfs", "gpart", "mount", "umount", "swapon", "swapoff",
+    "reboot", "shutdown", "poweroff", "halt", "init", "telinit",
+    "kill", "pkill", "killall", "killall5",
+    "sudo", "su", "doas", "pkexec", "systemd-run", "nsenter", "chroot", "jexec",
+    "sh", "bash", "zsh", "dash", "csh", "tcsh", "ksh", "fish",
+    "python", "python3", "perl", "ruby", "node", "php", "lua", "awk", "gawk", "mawk", "sed",
+    "vi", "vim", "nano", "ed", "emacs", "crontab", "at", "batch",
+    "xargs", "env", "nohup", "setsid", "timeout", "watch", "screen", "tmux", "exec", "eval",
+    "iptables", "ip6tables", "nft", "ebtables", "arptables", "firewall-cmd", "ufw", "ipfw",
+    "modprobe", "insmod", "rmmod", "kldload", "kldunload",
+    "passwd", "useradd", "userdel", "usermod", "groupadd", "chpasswd", "pw", "vipw",
+    "ssh", "scp", "sftp", "rsync", "wget", "curl", "fetch", "nc", "ncat", "netcat", "socat", "telnet", "ftp", "tftp",
+    "apt", "apt-get", "dpkg", "yum", "dnf", "rpm", "pip", "pip3", "pkg", "snap",
+    "opnsense-update", "freebsd-update", "configctl", "pluginctl", "qm", "pct",
+]
+
+# A path argument (one containing "/") that names a protected file. Matched anywhere in the
+# argument, ignoring case.
+paths = [
+    "shadow", "gshadow", "master\\.passwd", "spwd\\.db", "sudoers",
+    "(^|/)\\.ssh(/|$)", "(^|/)id_[a-z0-9]+", "_key$", "\\.key$", "\\.pem$", "\\.p12$", "\\.pfx$",
+    "/etc/ssl/private", "(^|/)private(/|$)",
+    "config\\.xml", "^/conf(/|$)", "(^|/)\\.env", "secret", "credential", "token", "\\.htpasswd",
+    "(^|/)\\.netrc$", "(^|/)\\.pgpass$", "keytab",
+]
+
+# An argument that makes another program run, whatever the program.
+any_args = "exec|-exec|--exec|-execdir|-ok|-delete|eval"
+
+[unsafe.first]
+# The verb (first argument) that would change state.
+systemctl = "start|stop|restart|reload|try-restart|reload-or-restart|try-reload-or-restart|enable|disable|reenable|mask|unmask|kill|isolate|edit|set-property|daemon-reload|daemon-reexec|reset-failed|poweroff|reboot|halt|suspend|hibernate|hybrid-sleep|kexec|soft-reboot|default|rescue|emergency|link|revert|preset|preset-all|set-environment|unset-environment|import-environment|freeze|thaw|clean|bind|mount-image|switch-root|exit|log-level|log-target|service-log-level|service-log-target|set-default"
+resolvectl = "revert|flush-caches|reset-statistics|reset-server-features|log-level"
+timedatectl = "set-time|set-timezone|set-local-rtc|set-ntp"
+docker = "run|exec|rm|rmi|stop|start|restart|kill|pull|push|cp|create|commit|build|compose|system|volume|network|image|container|update|pause|unpause|rename|attach|login|logout|load|save|import|export|tag|swarm|service|stack|secret|config|plugin|context|buildx|inspect"
+
+[unsafe.args]
+# An argument, in any position, that would change state for this program.
+ip = "add|del|delete|set|flush|change|replace|append|prepend|save|restore|up|down|netns|-batch|-b|-force"
+ifconfig = "up|down|destroy|create|alias|-alias|delete|inet|inet6|mtu|ether|lladdr|media|mediaopt|vlan|vlandev|-vlandev|monitor|-monitor|promisc|-promisc|name|description|addm|deletem|ssid|txpower|channel|metric|link"
+pfctl = "-[A-Za-z]*[dDeEfFkKxXzRAOMN][A-Za-z]*|add|delete|flush|replace|kill|expire|load|zero|test"
+service = "start|stop|restart|reload|onestart|onestop|onerestart|enable|disable|delete|forcestop|forcerestart|onereload|forcereload"
+ss = "-[A-Za-z]*K[A-Za-z]*|--kill"
+ethtool = "-[sKAGLCEfrWpe]|--change|--reset|--flash|--set-.*|--features|--offload"
+sysctl = "-[A-Za-z]*[wpf][A-Za-z]*|--write|--load|--system"
+dmesg = "-[A-Za-z]*[cCDEn][A-Za-z]*|--clear|--read-clear|--console-off|--console-on|--console-level"
+journalctl = "--vacuum-size|--vacuum-time|--vacuum-files|--rotate|--flush|--sync|--relinquish-var|--smart-relinquish-var|--setup-keys|--update-catalog"
+ping = "-[A-Za-z]*f[A-Za-z]*|--flood"
 
 # ---------------------------------------------------------------------------- linux
 [roles.linux.programs.ip]
-forms = [["addr|route|link|neigh", "show"], ["-br", "addr|link"]]
+usage = "ip [-br] [-4|-6] addr|route|link|neigh|rule [show|list|get] [dev IFACE] [ADDRESS]"
+args = [
+    "-(br|brief|4|6|s|d|c|o|j|p|details|stats)",
+    "addr|address|a|route|r|link|l|neigh|n|rule|ru|maddr|m",
+    "show|list|lst|get|sh",
+    "dev|to|from|table",
+    "(eth|en|em|wl|lo|br|vmbr|bond|tun|tap|wg|tailscale|veth|docker|virbr)[a-z0-9._-]*",
+    "[0-9][0-9a-f.:/]*",
+    "main|local|default",
+]
+max_args = 7
 
 [roles.linux.programs.ping]
-forms = [["-c", "[1-5]", "[a-z0-9][a-z0-9.-]*"]]
+usage = "ping -c 1-5 [-W 1-5] [-q] [-n] HOST"
+values = { "-c" = "[1-5]", "-W" = "[1-5]" }
+args = ["-q", "-n", "-4", "-6", "[a-z0-9][a-z0-9.:-]*"]
+max_args = 7
+require = ["-c"]
 
 [roles.linux.programs.cat]
-forms = [["/etc/resolv\\.conf|/etc/hosts"]]
+usage = "cat FILE... (configuration under /etc and /opt, /var/unbound, logs under /var/log, /proc and /run/systemd/resolve)"
+args = [
+    "/etc/[A-Za-z0-9._/@-]+",
+    "/opt/[A-Za-z0-9._/@-]+",
+    "/var/log/[A-Za-z0-9._/@-]+",
+    "/var/unbound/[A-Za-z0-9._/@-]+",
+    "/run/systemd/resolve/[a-z0-9._-]+",
+    "/proc/(net/[a-z0-9_]+|meminfo|loadavg|uptime|cpuinfo|mounts|swaps|version|pressure/[a-z]+)",
+]
+max_args = 4
+
+[roles.linux.programs.head]
+usage = "head [-n LINES] FILE (same files as cat)"
+values = { "-n" = "[0-9]{1,4}" }
+args = ["/etc/[A-Za-z0-9._/@-]+", "/opt/[A-Za-z0-9._/@-]+", "/var/log/[A-Za-z0-9._/@-]+", "/var/unbound/[A-Za-z0-9._/@-]+", "/proc/[a-z0-9/_]+"]
+max_args = 3
+
+[roles.linux.programs.tail]
+usage = "tail [-n LINES] FILE (same files as cat; no follow mode)"
+values = { "-n" = "[0-9]{1,4}" }
+args = ["/etc/[A-Za-z0-9._/@-]+", "/opt/[A-Za-z0-9._/@-]+", "/var/log/[A-Za-z0-9._/@-]+", "/var/unbound/[A-Za-z0-9._/@-]+", "/proc/[a-z0-9/_]+"]
+max_args = 3
+
+[roles.linux.programs.grep]
+usage = "grep [-i -n -c -v -w -l -E -F -h -H] [-m COUNT] WORD FILE... (same files as cat; one-word pattern, no recursion)"
+values = { "-m" = "[0-9]{1,3}" }
+args = [
+    "-[incvwlEFHh]+",
+    "[A-Za-z0-9_.:@+][A-Za-z0-9_.:@+-]*",
+    "/etc/[A-Za-z0-9._/@-]+", "/opt/[A-Za-z0-9._/@-]+", "/var/log/[A-Za-z0-9._/@-]+", "/var/unbound/[A-Za-z0-9._/@-]+",
+]
+max_args = 6
+
+[roles.linux.programs.ls]
+usage = "ls [-l -a -h -t -r -d -1] DIRECTORY..."
+args = ["-[lahtrdS1F]+", "/(etc|var|run|proc|opt|srv|tmp|usr/local)(/[A-Za-z0-9._@-]+)*/?"]
+max_args = 4
+
+[roles.linux.programs.wc]
+usage = "wc [-l -w -c] FILE"
+args = ["-[lwc]+", "/(etc|var/log|opt|var/unbound)/[A-Za-z0-9._/@-]+"]
+max_args = 3
 
 [roles.linux.programs.systemctl]
-forms = [["status|is-active|is-enabled", "[a-z0-9][a-z0-9@._-]*"]]
+usage = "systemctl status|is-active|is-enabled|is-failed|list-units|list-timers|list-sockets|list-unit-files [UNIT...] [--no-pager] [-l] [--all] [--type TYPE] [--state STATE]"
+first = "status|is-active|is-enabled|is-failed|list-units|list-timers|list-sockets|list-unit-files|list-dependencies"
+values = { "--type" = "service|socket|timer|mount|target|path", "-t" = "service|socket|timer|mount|target|path", "--state" = "failed|running|active|inactive|exited|enabled|disabled|listening" }
+args = [
+    "--no-pager", "-l", "--full", "--all", "-a", "--failed", "--plain", "--no-legend",
+    "[a-z0-9][A-Za-z0-9@._:-]*",
+]
+max_args = 8
 
 [roles.linux.programs.journalctl]
-forms = [["--no-pager", "-n", "[0-9]{1,3}", "-u", "[a-z0-9][a-z0-9@._-]*"]]
+usage = "journalctl [-u UNIT] [-n LINES] [-p PRIORITY] [-b] [-k] [-r] [--since WHEN] [--until WHEN] [-o short|short-iso|cat] [--no-pager] (no follow mode)"
+values = { "-n" = "[0-9]{1,4}", "--lines" = "[0-9]{1,4}", "-u" = "[a-z0-9][A-Za-z0-9@._:-]*", "--unit" = "[a-z0-9][A-Za-z0-9@._:-]*", "-p" = "emerg|alert|crit|err|warning|notice|info|debug|[0-7]", "--priority" = "emerg|alert|crit|err|warning|notice|info|debug|[0-7]", "--since" = "today|yesterday|now|-[0-9]{1,3}(min|m|h|d)|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}:[0-9]{2}(:[0-9]{2})?", "-S" = "today|yesterday|now|-[0-9]{1,3}(min|m|h|d)|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}:[0-9]{2}(:[0-9]{2})?", "--until" = "today|yesterday|now|-[0-9]{1,3}(min|m|h|d)|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}:[0-9]{2}(:[0-9]{2})?", "-U" = "today|yesterday|now|-[0-9]{1,3}(min|m|h|d)|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}:[0-9]{2}(:[0-9]{2})?", "-o" = "short|short-iso|short-precise|cat|json|verbose", "--output" = "short|short-iso|short-precise|cat|json|verbose", "-g" = "[A-Za-z0-9_.:@+][A-Za-z0-9_.:@+-]*", "--grep" = "[A-Za-z0-9_.:@+][A-Za-z0-9_.:@+-]*" }
+args = ["--no-pager", "-b", "--boot", "-k", "--dmesg", "-r", "--reverse", "-q", "-x"]
+max_args = 14
 
 [roles.linux.programs.dig]
-forms = [
-    ["[a-z0-9][a-z0-9.-]*"],
-    ["[a-z0-9][a-z0-9.-]*", "@[a-z0-9][a-z0-9.-]*"],
-    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME"],
-    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME", "@[a-z0-9][a-z0-9.-]*"],
+usage = "dig [@SERVER] NAME [TYPE] [-x ADDRESS] [-4|-6] [-p PORT] [+short +noall +answer +stats +tcp +trace +norecurse +dnssec]"
+args = [
+    "[a-z0-9_][a-z0-9_.:-]*",
+    "@[a-z0-9][a-z0-9.:-]*",
+    "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME|SRV|CAA|ANY|DS|DNSKEY|HTTPS|SVCB",
+    "\\+(short|noall|all|answer|noanswer|stats|nostats|tcp|notcp|trace|norecurse|recurse|dnssec|nocmd|cmd|multiline|nssearch|identify|comments|nocomments|question|noquestion|authority|additional)",
+    "-4", "-6",
 ]
+values = { "-x" = "[0-9a-f][0-9a-f.:]*", "-t" = "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME|SRV|CAA|ANY|DS|DNSKEY|HTTPS|SVCB", "-p" = "[0-9]{1,5}" }
+max_args = 10
 
 [roles.linux.programs.nslookup]
-forms = [["[a-z0-9][a-z0-9.-]*"], ["[a-z0-9][a-z0-9.-]*", "[a-z0-9][a-z0-9.-]*"]]
+usage = "nslookup NAME [SERVER]"
+args = ["[a-z0-9_][a-z0-9_.:-]*"]
+max_args = 2
+
+[roles.linux.programs.host]
+usage = "host [-t TYPE] [-a] [-v] NAME [SERVER]"
+values = { "-t" = "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME|SRV|ANY" }
+args = ["-a", "-v", "-4", "-6", "[a-z0-9_][a-z0-9_.:-]*"]
+max_args = 6
+
+[roles.linux.programs.getent]
+usage = "getent hosts|ahosts|ahostsv4|ahostsv6|services|protocols|networks [KEY]"
+first = "hosts|ahosts|ahostsv4|ahostsv6|services|protocols|networks"
+args = ["[a-z0-9_][a-z0-9_.:/-]*"]
+max_args = 3
+
+[roles.linux.programs.resolvectl]
+usage = "resolvectl status|query|statistics [NAME|IFACE]"
+first = "status|query|statistics"
+args = ["-4", "-6", "[a-z0-9_][a-z0-9_.:-]*"]
+max_args = 4
 
 [roles.linux.programs.ss]
-forms = [["-tulpn"]]
+usage = "ss [-t -u -l -n -p -a -x -w -e -m -i -s -4 -6 -H] (flags may be combined, for example ss -tulpn)"
+args = ["-[tulnpaxwemis46H]+"]
+max_args = 3
+
+[roles.linux.programs.netstat]
+usage = "netstat [-t -u -l -n -p -a -r -s -i -e] (flags may be combined)"
+args = ["-[tulnparsie]+"]
+max_args = 3
+
+[roles.linux.programs.traceroute]
+usage = "traceroute [-n] [-m HOPS] [-w 1-5] [-q 1-3] HOST"
+values = { "-m" = "[0-9]{1,2}", "-w" = "[1-5]", "-q" = "[1-3]" }
+args = ["-n", "-I", "-T", "[a-z0-9][a-z0-9.:-]*"]
+max_args = 9
+
+[roles.linux.programs.tracepath]
+usage = "tracepath [-n] [-m HOPS] HOST"
+values = { "-m" = "[0-9]{1,2}" }
+args = ["-n", "[a-z0-9][a-z0-9.:-]*"]
+max_args = 4
+
+[roles.linux.programs.ethtool]
+usage = "ethtool [-S|-i|-m] IFACE"
+args = ["-S", "-i", "-m", "(eth|en|em|wl|bond|vmbr|br)[a-z0-9._-]*"]
+max_args = 2
+
+[roles.linux.programs.docker]
+usage = "docker ps|logs|stats|images|version|info|top [-a] [--no-stream] [--tail LINES] [NAME]"
+first = "ps|logs|stats|images|version|info|top"
+values = { "--tail" = "[0-9]{1,4}", "-n" = "[0-9]{1,4}", "--since" = "[0-9]{1,3}[mhd]" }
+args = ["-a", "--all", "--no-stream", "-t", "--timestamps", "[a-z0-9][A-Za-z0-9_.-]*"]
+max_args = 6
+
+[roles.linux.programs.sysctl]
+usage = "sysctl [-a] [-n] NAME..."
+args = ["-[an]+", "[a-z][a-z0-9_.-]*"]
+max_args = 4
+
+[roles.linux.programs.dmesg]
+usage = "dmesg [-T] [-x] [--level LEVELS]"
+values = { "--level" = "(emerg|alert|crit|err|warn|notice|info|debug)(,(emerg|alert|crit|err|warn|notice|info|debug))*", "-l" = "(emerg|alert|crit|err|warn|notice|info|debug)(,(emerg|alert|crit|err|warn|notice|info|debug))*" }
+args = ["-T", "-x", "-H"]
+max_args = 4
+
+[roles.linux.programs.timedatectl]
+usage = "timedatectl [status|show|timesync-status]"
+forms = [[], ["status|show|timesync-status|show-timesync"]]
 
 [roles.linux.programs.uptime]
+usage = "uptime"
 forms = [[]]
 
 [roles.linux.programs.df]
-forms = [["-h"]]
+usage = "df [-h -T -i -l] [PATH]"
+args = ["-[hTil]+", "/[A-Za-z0-9._/-]*"]
+max_args = 3
+
+[roles.linux.programs.free]
+usage = "free [-h -m -g -w]"
+args = ["-[hmgbwt]+"]
+max_args = 2
+
+[roles.linux.programs.uname]
+usage = "uname [-a -s -n -r -v -m]"
+args = ["-[asnrvmpio]+"]
+max_args = 2
+
+[roles.linux.programs.hostname]
+usage = "hostname [-f -I -i]"
+forms = [[], ["-f|-I|-i|-s|-d"]]
+
+[roles.linux.programs.date]
+usage = "date [-u]"
+forms = [[], ["-u|--utc"]]
+
+[roles.linux.programs.ps]
+usage = "ps aux | ps -ef | ps -e (no other forms)"
+forms = [["aux"], ["auxww"], ["-ef"], ["-e"], ["-eF"], ["axjf"]]
+
+# ---------------------------------------------------------------------------- dns
+# A Linux host whose job is the network's primary DNS resolver: the same commands as linux.
+[roles.dns]
+extends = ["linux"]
 
 # ---------------------------------------------------------------------------- firewall
 # A BSD-based firewall that also runs a local DNS resolver.
 [roles.firewall.programs.pfctl]
-forms = [["-s", "rules|nat|info"]]
+usage = "pfctl -s rules|nat|states|info|labels|timeouts|memory|Interfaces|Tables|all [-v|-vv] | pfctl -t TABLE -T show"
+values = { "-s" = "rules|nat|states|info|labels|timeouts|memory|Interfaces|Tables|all|queue|osfp|r|n|s|i", "-t" = "[A-Za-z0-9_]+", "-T" = "show" }
+args = ["-v", "-vv"]
+max_args = 5
 
 [roles.firewall.programs.netstat]
-forms = [["-rn"]]
+usage = "netstat [-r -n -a -i -W -s -4 -6] [-f inet|inet6] (flags may be combined, for example netstat -rn)"
+values = { "-f" = "inet|inet6|link" }
+args = ["-[rnaiWsb46l]+"]
+max_args = 4
+
+[roles.firewall.programs.sockstat]
+usage = "sockstat [-4 -6 -l -c -n] [-p PORT]"
+values = { "-p" = "[0-9]{1,5}" }
+args = ["-[46lcnLsu]+"]
+max_args = 4
 
 [roles.firewall.programs.ifconfig]
-forms = [[], ["[a-z][a-z0-9_.]*"]]
+usage = "ifconfig [-a] [IFACE]"
+args = ["-a", "-l", "-u", "-d", "(vtnet|igb|ix|ixl|em|re|lo|lagg|vlan|bridge|tun|tap|wg|ovpn|enc|pflog|pfsync|tailscale|bge|cxl|mce)[a-z0-9_.]*"]
+max_args = 2
+
+[roles.firewall.programs.arp]
+usage = "arp -a [-n] | arp -n ADDRESS"
+args = ["-a", "-n", "-an", "[0-9][0-9.]*"]
+max_args = 3
 
 [roles.firewall.programs.cat]
-forms = [["/var/unbound/unbound\\.conf|/etc/resolv\\.conf"]]
+usage = "cat FILE... (configuration under /etc, /usr/local/etc, /var/etc and /var/unbound, records under /var/db, logs under /var/log)"
+args = [
+    "/etc/[A-Za-z0-9._/@-]+",
+    "/usr/local/etc/[A-Za-z0-9._/@-]+",
+    "/var/unbound/[A-Za-z0-9._/@-]+",
+    "/var/db/[A-Za-z0-9._/@-]+",
+    "/var/log/[A-Za-z0-9._/@-]+",
+    "/var/etc/[A-Za-z0-9._/@-]+",
+]
+max_args = 4
+
+[roles.firewall.programs.head]
+usage = "head [-n LINES] FILE (same files as cat)"
+values = { "-n" = "[0-9]{1,4}" }
+args = ["/etc/[A-Za-z0-9._/@-]+", "/usr/local/etc/[A-Za-z0-9._/@-]+", "/var/unbound/[A-Za-z0-9._/@-]+", "/var/db/[A-Za-z0-9._/@-]+", "/var/log/[A-Za-z0-9._/@-]+"]
+max_args = 3
+
+[roles.firewall.programs.tail]
+usage = "tail [-n LINES] FILE (same files as cat; no follow mode)"
+values = { "-n" = "[0-9]{1,4}" }
+args = ["/etc/[A-Za-z0-9._/@-]+", "/usr/local/etc/[A-Za-z0-9._/@-]+", "/var/unbound/[A-Za-z0-9._/@-]+", "/var/db/[A-Za-z0-9._/@-]+", "/var/log/[A-Za-z0-9._/@-]+"]
+max_args = 3
+
+[roles.firewall.programs.grep]
+usage = "grep [-i -n -c -v -w -l -E -F -h -H] [-m COUNT] WORD FILE... (same files as cat; one-word pattern, no recursion)"
+values = { "-m" = "[0-9]{1,3}" }
+args = [
+    "-[incvwlEFHh]+",
+    "[A-Za-z0-9_.:@+][A-Za-z0-9_.:@+-]*",
+    "/etc/[A-Za-z0-9._/@-]+", "/usr/local/etc/[A-Za-z0-9._/@-]+", "/var/unbound/[A-Za-z0-9._/@-]+",
+    "/var/db/[A-Za-z0-9._/@-]+", "/var/log/[A-Za-z0-9._/@-]+",
+]
+max_args = 6
+
+[roles.firewall.programs.ls]
+usage = "ls [-l -a -h -t -r -d -1] DIRECTORY..."
+args = ["-[lahtrdS1F]+", "/(etc|var|tmp|usr/local/etc)(/[A-Za-z0-9._@-]+)*/?"]
+max_args = 4
 
 [roles.firewall.programs.ping]
-forms = [["-c", "[1-5]", "[a-z0-9][a-z0-9.-]*"]]
+usage = "ping -c 1-5 [-t 1-9] [-q] [-n] HOST"
+values = { "-c" = "[1-5]", "-t" = "[1-9]", "-W" = "[1-5]" }
+args = ["-q", "-n", "-4", "-6", "[a-z0-9][a-z0-9.:-]*"]
+max_args = 7
+require = ["-c"]
+
+[roles.firewall.programs.traceroute]
+usage = "traceroute [-n] [-m HOPS] [-w 1-5] [-q 1-3] HOST"
+values = { "-m" = "[0-9]{1,2}", "-w" = "[1-5]", "-q" = "[1-3]" }
+args = ["-n", "-I", "[a-z0-9][a-z0-9.:-]*"]
+max_args = 9
 
 [roles.firewall.programs.drill]
-forms = [["[a-z0-9][a-z0-9.-]*"], ["[a-z0-9][a-z0-9.-]*", "@[a-z0-9][a-z0-9.-]*"]]
+usage = "drill [-T] [-D] [-x] NAME [TYPE] [@SERVER]"
+args = [
+    "-T", "-D", "-x", "-4", "-6",
+    "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME|SRV|ANY|DS|DNSKEY",
+    "@[a-z0-9][a-z0-9.:-]*",
+    "[a-z0-9_][a-z0-9_.:-]*",
+]
+max_args = 6
+
+[roles.firewall.programs.host]
+usage = "host [-t TYPE] [-a] [-v] NAME [SERVER]"
+values = { "-t" = "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME|SRV|ANY" }
+args = ["-a", "-v", "[a-z0-9_][a-z0-9_.:-]*"]
+max_args = 6
+
+[roles.firewall.programs.service]
+usage = "service NAME status | service -e (list enabled services)"
+forms = [["[a-z0-9][a-z0-9_-]*", "status|onestatus"], ["-e"], ["-l"]]
+
+[roles.firewall.programs.sysctl]
+usage = "sysctl [-a] [-n] NAME..."
+args = ["-[an]+", "[a-z][a-z0-9_.%-]*"]
+max_args = 4
+
+[roles.firewall.programs.dmesg]
+usage = "dmesg [-a]"
+forms = [[], ["-a"]]
 
 [roles.firewall.programs.uptime]
+usage = "uptime"
 forms = [[]]
 
-# ---------------------------------------------------------------------------- dns
-# A Linux host whose job is the network's primary DNS resolver.
-[roles.dns.programs.cat]
-forms = [["/etc/resolv\\.conf|/etc/hosts"]]
+[roles.firewall.programs.df]
+usage = "df [-h -T -i -l] [PATH]"
+args = ["-[hTil]+", "/[A-Za-z0-9._/-]*"]
+max_args = 3
 
-[roles.dns.programs.systemctl]
-forms = [["status|is-active|is-enabled", "[a-z0-9][a-z0-9@._-]*"]]
+[roles.firewall.programs.uname]
+usage = "uname [-a -s -n -r -v -m]"
+args = ["-[asnrvmpio]+"]
+max_args = 2
 
-[roles.dns.programs.journalctl]
-forms = [["--no-pager", "-n", "[0-9]{1,3}", "-u", "[a-z0-9][a-z0-9@._-]*"]]
+[roles.firewall.programs.date]
+usage = "date [-u]"
+forms = [[], ["-u"]]
 
-[roles.dns.programs.dig]
-forms = [
-    ["[a-z0-9][a-z0-9.-]*"],
-    ["[a-z0-9][a-z0-9.-]*", "@[a-z0-9][a-z0-9.-]*"],
-    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME"],
-    ["[a-z0-9][a-z0-9.-]*", "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME", "@[a-z0-9][a-z0-9.-]*"],
-]
-
-[roles.dns.programs.ss]
-forms = [["-tulpn"]]
-
-[roles.dns.programs.uptime]
-forms = [[]]
+[roles.firewall.programs.ps]
+usage = "ps aux | ps -ax (no other forms)"
+forms = [["aux"], ["auxww"], ["-ax"], ["-auxww"]]
