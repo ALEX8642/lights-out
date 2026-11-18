@@ -1,0 +1,1 @@
+{"idle_window_end_utc": "2026-11-18T01:12:07+00:00", "idle_minutes": 15, "idle_median_w": 120.9, "idle_mean_w": 121.8, "router_on_plug": true, "note": "spark0 model-watchdog canary every 15 min adds load spikes"}

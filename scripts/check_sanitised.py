@@ -28,7 +28,7 @@ ALLOWED_NETWORKS = tuple(
         "9.9.9.9/32",
     )
 )
-SCANNED = ("scenarios", "policies", "tests", "docs", "src", "README.md")
+SCANNED = ("scenarios", "policies", "results", "tests", "docs", "src", "README.md")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 
 
