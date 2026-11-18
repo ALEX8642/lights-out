@@ -14,10 +14,19 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from lights_out.policy import Allow, Policy
-from lights_out.scenario import ACTIONS, CATEGORIES, COMPONENTS, EXTERNAL, Fix, FixState, Scenario
+from lights_out.scenario import (
+    ACTIONS,
+    CATEGORIES,
+    COMPONENTS,
+    EXTERNAL,
+    NO_FIX,
+    Fix,
+    FixState,
+    Scenario,
+)
 from lights_out.targets import Target
 from lights_out.transcript import Transcript
 
@@ -65,6 +74,7 @@ class Report:
     recommendation: str  # free text for the operator; not scored
     detail: str = ""  # the part at fault in the model's own words; not scored
     contributing: tuple[str, str] | None = None  # (host, component) that made it show, if any
+    fix: str | None = None  # the fix named in the report, or NO_FIX; None when none are offered
 
 
 @dataclass(frozen=True)
@@ -182,9 +192,29 @@ _CLASS_WORDS = {
 
 
 def tools_for(scenario: Scenario) -> tuple[Mapping[str, object], ...]:
-    """The tools offered in this scenario: run and report, plus fix when it offers fixes."""
+    """The tools offered in this scenario: run and report, plus fix when it offers fixes.
+
+    With fixes on offer, the report must also name one, or "none": a drill cannot end without
+    the fix decision (docs/adr/0013-fix-in-the-report.md).
+    """
     if not scenario.fixes:
         return TOOLS
+    report_function = dict(cast(Mapping[str, object], TOOLS[1]["function"]))
+    parameters = dict(cast(Mapping[str, object], report_function["parameters"]))
+    parameters["properties"] = {
+        **cast(Mapping[str, object], parameters["properties"]),
+        "fix": {
+            "type": "string",
+            "enum": [fix.id for fix in scenario.fixes] + [NO_FIX],
+            "description": (
+                "The fix to request, from the list, or 'none'. The harness decides what happens "
+                "to it, as with the fix tool. A fix you already requested is not requested again."
+            ),
+        },
+    }
+    parameters["required"] = [*cast(list[str], parameters["required"]), "fix"]
+    report_function["parameters"] = parameters
+    report_tool: Mapping[str, object] = {"type": "function", "function": report_function}
     fix_tool: Mapping[str, object] = {
         "type": "function",
         "function": {
@@ -210,7 +240,7 @@ def tools_for(scenario: Scenario) -> tuple[Mapping[str, object], ...]:
             },
         },
     }
-    return (*TOOLS, fix_tool)
+    return (TOOLS[0], report_tool, fix_tool)
 
 
 def decide_fix(fix: Fix, state: FixState) -> tuple[str, str]:
@@ -418,6 +448,16 @@ def run_drill(
                     denied += was_denied
                 elif call.name == "report":
                     report = _report(call, scenario)
+                    if report.fix not in (None, NO_FIX) and report.fix not in requested_fixes:
+                        named = {"id": report.fix, "reason": report.cause}
+                        _fix(
+                            ToolCall(call.id, "fix", named),
+                            scenario,
+                            transcript,
+                            steps,
+                            requested_fixes,
+                            via="report",
+                        )
                     transcript.append("report", steps, **_report_data(report))
                     stop = "report"
                     break
@@ -449,8 +489,12 @@ def _fix(
     transcript: Transcript,
     step: int,
     requested: set[str],
+    via: str | None = None,
 ) -> str:
-    """Handle one ``fix`` call: validate it, let the harness decide, record and reply."""
+    """Handle one ``fix`` call: validate it, let the harness decide, record and reply.
+
+    ``via`` is recorded when the fix was named in the report rather than requested directly.
+    """
     fix_id, reason = call.arguments.get("id"), call.arguments.get("reason")
     if not isinstance(fix_id, str):
         raise _ToolError("id must be a string")
@@ -477,7 +521,10 @@ def _fix(
     requested.add(fix.id)
     assert scenario.state is not None  # loader guarantees state when fixes exist
     outcome, message = decide_fix(fix, scenario.state)
-    transcript.append("fix", step, id=fix.id, reason=reason, options=options, outcome=outcome)
+    extra = {} if via is None else {"via": via}
+    transcript.append(
+        "fix", step, id=fix.id, reason=reason, options=options, outcome=outcome, **extra
+    )
     return message
 
 
@@ -492,6 +539,8 @@ def _report_data(report: Report) -> dict[str, object]:
         "recommendation": report.recommendation,
         "detail": report.detail,
     }
+    if report.fix is not None:
+        data["fix"] = report.fix
     if report.contributing is not None:
         data["contributing"] = {"host": report.contributing[0], "component": report.contributing[1]}
     return data
@@ -592,6 +641,13 @@ def _report(call: ToolCall, scenario: Scenario) -> Report:
     if not isinstance(detail, str):
         raise _ToolError("detail must be a string")
     contributing = _contributing(args.get("contributing"), hosts)
+    fix: str | None = None
+    if scenario.fixes:
+        offered = [f.id for f in scenario.fixes] + [NO_FIX]
+        value = args.get("fix")
+        if not isinstance(value, str) or value not in offered:
+            raise _ToolError(f"fix must be one of: {', '.join(offered)}")
+        fix = value
     if not isinstance(cause, str) or not cause.strip():
         raise _ToolError("cause must be a non-empty string")
     evidence = args.get("evidence")
@@ -605,7 +661,7 @@ def _report(call: ToolCall, scenario: Scenario) -> Report:
         raise _ToolError("recommendation must be a string")
     return Report(
         category, host, component, cause, tuple(evidence), action, recommendation, detail,
-        contributing,
+        contributing, fix,
     )  # fmt: skip
 
 
