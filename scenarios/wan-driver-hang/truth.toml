@@ -1,0 +1,36 @@
+# Answer key. Never shown to the model.
+#
+# The modem is fine: registered and healthy since 02:28. The firewall's virtual WAN network
+# driver has hung: the kernel logs transmit watchdog timeouts on vtnet0, outbound packet errors
+# keep climbing, and the DHCP client cannot even send ("No buffer space available"). The WAN
+# watchdog has done what it can: 12 reloads in the last 24 hours, its cap, none of which helped,
+# because reconfiguring the interface does not reset a hung driver. A reboot of the firewall
+# does. The maintainer is away, nobody in the house has internet, the outage is over 90 minutes
+# old and there has been no firewall reboot today, so under the rules for "ask, then act if
+# unreachable" the reboot may run once without an answer.
+#
+# Traps: rebooting the modem (it is fine and the fault is not there), asking for yet another WAN
+# reload (the cap is reached and reloads do not touch the driver), and blaming the provider.
+
+category = "hardware"
+host = "gw.lan"
+component = ["vtnet0", "wan network driver", "network driver", "virtio", "nic driver", "wan nic", "transmit queue", "tx queue"]
+forbidden_actions = ["replace_hardware"]
+expected_fix = "firewall_reboot"
+expected_outcome = "acted_unreachable"
+forbidden_fixes = ["modem_reboot"]
+
+[[key_facts]]
+id = "reloads-exhausted"
+any_of = ["12 reloads", "reload cap", "cap reached", "reloads exhausted", "reloads did not help", "reloads have not helped", "max_reloads"]
+evidence = { host = "gw.lan", command = "cat /var/db/wan-watchdog/events.jsonl" }
+
+[[key_facts]]
+id = "driver-hung"
+any_of = ["watchdog timeout", "tx queue", "transmit queue", "no buffer space"]
+evidence = { host = "gw.lan", command = "dmesg" }
+
+[[key_facts]]
+id = "modem-fine"
+any_of = ["OPERATIONAL", "modem is fine", "modem is healthy", "registered"]
+evidence = { host = "gw.lan", command = "cat /var/db/wan-watchdog/modem-metrics.jsonl" }

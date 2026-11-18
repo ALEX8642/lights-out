@@ -88,7 +88,7 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
         for fact in with_evidence
         if fact.evidence is not None
         and any(
-            host == fact.evidence[0] and same_question(argv, tuple(fact.evidence[1].split()))
+            host == fact.evidence[0] and _answers(argv, tuple(fact.evidence[1].split()))
             for host, argv in ran
         )
     )
@@ -137,6 +137,19 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
         fix_outcome=fix_outcome,
         fix_correct=fix_correct,
     )
+
+
+def _answers(ran: tuple[str, ...], evidence: tuple[str, ...]) -> bool:
+    """Whether running ``ran`` showed what the evidence command shows.
+
+    The same question under the replay rules, or, when the evidence is reading a file with
+    ``cat``, reading that file with ``head`` or ``tail``.
+    """
+    if same_question(ran, evidence):
+        return True
+    if evidence[0] == "cat" and len(evidence) == 2 and ran[0] in {"cat", "head", "tail"}:
+        return evidence[1] in ran[1:]
+    return False
 
 
 def _commands_run(events: Sequence[Event]) -> set[tuple[str, tuple[str, ...]]]:

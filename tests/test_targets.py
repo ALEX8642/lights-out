@@ -318,3 +318,20 @@ def test_same_question_is_public_and_symmetric() -> None:
     a, b = ("dig", "nas.lan", "@10.20.0.3"), ("dig", "@10.20.0.3", "nas.lan", "+short")
     assert same_question(a, b) and same_question(b, a)
     assert not same_question(a, ("dig", "nas.lan", "@10.20.0.1"))
+
+
+def test_dmesg_and_arp_and_netstat_variants() -> None:
+    target = ReplayTarget(
+        scenario_with(
+            (("dmesg",), "kernel log"),
+            (("arp", "-an"), "arp table"),
+            (("netstat", "-rn"), "routes"),
+        )
+    )
+    for argv in [
+        ("dmesg", "-a"),
+        ("arp", "-a"),
+        ("arp", "-n", "-a"),
+        ("netstat", "-rn", "-f", "inet"),
+    ]:
+        assert target.run("mon.lan", argv).recorded is True, argv

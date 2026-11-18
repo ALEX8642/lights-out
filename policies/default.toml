@@ -299,9 +299,9 @@ args = ["-v", "-vv"]
 max_args = 5
 
 [roles.firewall.programs.netstat]
-usage = "netstat [-r -n -a -i -W -s -4 -6] [-f inet|inet6] (flags may be combined, for example netstat -rn)"
+usage = "netstat [-r -n -a -i -W -s -m -4 -6] [-f inet|inet6] (flags may be combined, for example netstat -rn; -m shows memory buffers)"
 values = { "-f" = "inet|inet6|link" }
-args = ["-[rnaiWsb46l]+"]
+args = ["-[rnaiWsbm46l]+"]
 max_args = 4
 
 [roles.firewall.programs.sockstat]

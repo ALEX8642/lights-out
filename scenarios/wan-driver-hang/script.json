@@ -1,0 +1,44 @@
+[
+  {
+    "text": "Check reachability, the watchdog's records and the modem's state.",
+    "tool_calls": [
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "ping -c 3 198.51.100.1"}},
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /var/db/wan-watchdog/events.jsonl"}},
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /var/db/wan-watchdog/modem-metrics.jsonl"}}
+    ]
+  },
+  {
+    "text": "The modem is OPERATIONAL, the watchdog has hit its reload cap, and sending fails with 'No buffer space available'. Look at the kernel messages for the WAN NIC.",
+    "tool_calls": [
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "dmesg"}},
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "netstat -i"}}
+    ]
+  },
+  {
+    "text": "vtnet0 shows repeated transmit watchdog timeouts and climbing output errors: the driver is hung. Reloads cannot reset it; a reboot of the firewall does.",
+    "tool_calls": [
+      {"name": "fix", "arguments": {"id": "firewall_reboot", "reason": "The WAN NIC driver (vtnet0) is hung: transmit watchdog timeouts, output errors climbing, sends fail with No buffer space available. 12 reloads in 24 h (the cap) did not help and the modem is OPERATIONAL. Only a reboot resets the driver."}}
+    ]
+  },
+  {
+    "text": "",
+    "tool_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "category": "hardware",
+          "host": "gw.lan",
+          "component": "vtnet0 WAN network driver",
+          "cause": "The firewall's WAN network driver (vtnet0) has hung: its transmit queue times out, so nothing can be sent to the provider even though the modem is registered and healthy.",
+          "evidence": [
+            "gw.lan: ping to the provider's gateway fails with sendto: No buffer space available",
+            "gw.lan: dmesg shows repeated vtnet0: watchdog timeout on queue 0; netstat -i shows 48211 output errors on vtnet0",
+            "gw.lan: events.jsonl shows 12 reloads in 24 hours, the cap, with no effect; modem-metrics.jsonl shows OPERATIONAL since 02:29"
+          ],
+          "action": "reboot_host",
+          "recommendation": "Reboot the firewall to reset the WAN driver (requested as firewall_reboot). Do not reboot the modem; it is healthy. If timeouts return after the reboot, investigate the virtual NIC on the hypervisor."
+        }
+      }
+    ]
+  }
+]

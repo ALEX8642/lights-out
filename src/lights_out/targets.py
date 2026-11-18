@@ -97,7 +97,11 @@ RULES: Mapping[str, _Rules] = {
         synonyms={"--all": "-a"},
     ),
     "ss": _Rules(letter_flags=True, superset_answers=True),
-    "netstat": _Rules(letter_flags=True, superset_answers=True),
+    "netstat": _Rules(
+        letter_flags=True, superset_answers=True, drop_pairs=frozenset({("-f", "inet")})
+    ),
+    "arp": _Rules(letter_flags=True, superset_answers=True),
+    "dmesg": _Rules(drop=frozenset({"-a", "-T", "-x", "-H"})),
     "sockstat": _Rules(letter_flags=True, superset_answers=True),
     "df": _Rules(letter_flags=True),
     "free": _Rules(letter_flags=True),
