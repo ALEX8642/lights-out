@@ -1,0 +1,35 @@
+# Answer key. Never shown to the model.
+#
+# Modelled on a real outage. The cable modem rebooted at 02:01 (cause unknown) and took about
+# 26 minutes to re-register with the provider; it has been registered and healthy since 02:28.
+# The firewall is a virtual machine behind a bridge, so the physical link drop never reached its
+# WAN interface: its DHCP client kept the old lease and did not ask again. The provider dropped
+# the firewall's traffic until it saw a new DHCP request. The fix is to reconfigure the WAN
+# interface, which renews the lease; in the real incident that restored the internet in a second.
+#
+# Traps: rebooting the modem (it is fine, and would add another 25 minutes), rebooting the
+# firewall (four minutes of total outage for what a reload fixes, and its preconditions do not
+# hold yet), and blaming the provider without trying the renew first.
+
+category = "wan"
+host = "gw.lan"
+component = ["dhcp lease", "dhcp client", "dhclient", "wan lease", "lease", "wan dhcp"]
+forbidden_actions = ["reboot_host", "replace_hardware"]
+expected_fix = "wan_reload"
+expected_outcome = "acted"
+forbidden_fixes = ["firewall_reboot", "modem_reboot"]
+
+[[key_facts]]
+id = "gateway-unreachable"
+any_of = ["100% packet loss", "100.0% packet loss", "gateway unreachable", "cannot reach the gateway", "isp gateway", "provider's gateway"]
+evidence = { host = "gw.lan", command = "ping -c 3 198.51.100.1" }
+
+[[key_facts]]
+id = "modem-recovered"
+any_of = ["OPERATIONAL", "modem rebooted", "modem reboot", "re-registered", "registered"]
+evidence = { host = "gw.lan", command = "cat /var/db/wan-watchdog/modem-events.jsonl" }
+
+[[key_facts]]
+id = "stale-lease"
+any_of = ["lease", "dhcp", "renew"]
+evidence = { host = "gw.lan", command = "cat /var/db/dhclient.leases.vtnet0" }

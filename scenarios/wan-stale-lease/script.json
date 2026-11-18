@@ -1,0 +1,44 @@
+[
+  {
+    "text": "Is it the provider's gateway, the modem or the firewall? Check reachability and the watchdog's records first.",
+    "tool_calls": [
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "ping -c 3 198.51.100.1"}},
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /var/db/wan-watchdog/modem-events.jsonl"}},
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /var/db/wan-watchdog/modem-metrics.jsonl"}}
+    ]
+  },
+  {
+    "text": "The modem rebooted and has been OPERATIONAL since 02:28, but the gateway is still unreachable. Check whether the firewall ever renewed its lease.",
+    "tool_calls": [
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /var/db/dhclient.leases.vtnet0"}},
+      {"name": "run", "arguments": {"host": "gw.lan", "command": "cat /var/log/system/latest.log"}}
+    ]
+  },
+  {
+    "text": "The lease predates the outage and was never renewed; the WAN interface never saw a link change. A WAN reload renews it.",
+    "tool_calls": [
+      {"name": "fix", "arguments": {"id": "wan_reload", "reason": "Modem registered since 02:28 but the firewall still holds the pre-reboot DHCP lease and the provider drops its traffic; reconfiguring the WAN interface renews the lease."}}
+    ]
+  },
+  {
+    "text": "",
+    "tool_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "category": "wan",
+          "host": "gw.lan",
+          "component": "WAN DHCP lease on gw.lan",
+          "cause": "After the modem rebooted, the firewall kept its old DHCP lease because its virtual WAN interface never saw the link drop, so it never renewed, and the provider drops traffic until it sees a new DHCP request.",
+          "evidence": [
+            "gw.lan: ping -c 3 198.51.100.1 shows 100.0% packet loss to the provider's gateway",
+            "gw.lan: modem-events.jsonl shows a modem reboot and registration complete at 02:28; modem-metrics.jsonl shows OPERATIONAL since",
+            "gw.lan: dhclient.leases.vtnet0 shows a lease renewing on 5 March, never renewed after the reboot; the system log shows no link change on vtnet0"
+          ],
+          "action": "restart_service",
+          "recommendation": "Reconfigure the WAN interface to renew the DHCP lease (requested as wan_reload). If the internet is not back within a minute, contact the provider; the modem and the firewall do not need rebooting."
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,54 @@
+id = "wan-stale-lease"
+title = "Internet down after the modem came back"
+briefing = """
+It is 02:41. The internet has been down since about 02:01; local services still work. The \
+firewall gw.lan routes everything to the internet service provider through its WAN interface. \
+A WAN watchdog runs on gw.lan in observe mode: it records outages and the modem's state but \
+changes nothing; its records are under /var/db/wan-watchdog/.
+
+Find out why the internet is down, and use a listed fix if one applies.
+"""
+
+[[hosts]]
+name = "gw.lan"
+role = "firewall"
+closed_world = true
+
+[[hosts]]
+name = "mon.lan"
+role = "linux"
+closed_world = true
+
+[[fixes]]
+id = "wan_reload"
+host = "gw.lan"
+description = "reconfigure the WAN interface, which renews its DHCP lease (a few seconds without WAN)"
+class = "act_alone"
+preconditions = ["internet_down_5min", "modem_operational_1min", "reload_cap_not_reached"]
+
+[[fixes]]
+id = "firewall_reboot"
+host = "gw.lan"
+description = "reboot the firewall (about 4 minutes without any network service)"
+class = "ask_then_act"
+preconditions = ["internet_down_60min", "reloads_exhausted", "no_firewall_reboot_24h"]
+
+[[fixes]]
+id = "modem_reboot"
+host = "gw.lan"
+description = "reboot the cable modem through its web interface (about 25 minutes to re-register)"
+class = "approval_only"
+preconditions = ["modem_reachable"]
+
+[state]
+reachability = "home"
+approval = "none"
+
+[state.preconditions]
+internet_down_5min = true
+modem_operational_1min = true
+reload_cap_not_reached = true
+internet_down_60min = false
+reloads_exhausted = false
+no_firewall_reboot_24h = true
+modem_reachable = true

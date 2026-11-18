@@ -19,6 +19,7 @@ ALLOWED_NETWORKS = tuple(
         "203.0.113.0/24",  # RFC 5737 documentation
         "10.20.0.0/16",  # the fictional lab LAN used by scenarios
         "10.0.0.0/32",  # the bare network number, as written in "10.0.0.0/8"
+        "255.0.0.0/8",  # netmasks such as 255.255.255.0, not addresses
         "127.0.0.0/8",
         "0.0.0.0/32",
         "1.1.1.1/32",
