@@ -649,9 +649,19 @@ def test_the_prompt_lists_the_offered_fixes_without_their_preconditions_state() 
     prompt = system_prompt(with_fixes(reload_failed=True), POLICY)
     assert "resolver_reload (gw.lan): reload the gateway's DNS resolver" in prompt
     assert "options: mode = dry-run | apply" in prompt
-    assert "asks the maintainer first" in prompt  # the reboot's class, in plain words
+    # the reboot's class, in plain words, including what happens when nobody answers
+    assert (
+        "asks the maintainer first; if they cannot be reached and its conditions hold, "
+        "it runs anyway" in prompt
+    )
     assert "reload_failed" not in prompt  # the state the harness checks is not given away
     assert "fix tool" not in system_prompt(MINI, POLICY)
+
+
+def test_the_prompt_says_requesting_is_safe_and_the_harness_decides() -> None:
+    prompt = system_prompt(with_fixes(), POLICY)
+    assert "Requesting a fix is safe" in prompt
+    assert "do not hold back a fix the evidence supports because the maintainer is away" in prompt
 
 
 def test_a_contributing_condition_is_recorded(tmp_path: Path) -> None:
