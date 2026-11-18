@@ -6,7 +6,9 @@ exist. Some commands can then be answered without their own recording, determini
 
 - ``cat``, ``head``, ``tail``, ``wc`` and ``grep`` of recorded files are computed from the
   recorded contents, and of unknown paths give the real "No such file or directory";
-- ``ls`` of a directory lists the recorded files below it;
+- ``ls`` of a directory lists the recorded files below it (``-R``: every directory below);
+- ``find DIR -name NAME`` and ``file PATH`` answer from the recorded files and the
+  directories they imply;
 - ``systemctl status``/``is-*``, ``journalctl -u`` and ``service NAME status`` of a service
   missing from the host's recorded listing give the real "not found" answers.
 
@@ -90,6 +92,8 @@ def _ls(state: HostState, args: list[str]) -> Derived | None:
     paths = _paths(args)
     if not paths:
         return None
+    if any(a.startswith("-") and "R" in a for a in args):
+        return _ls_recursive(state, paths)
     out, code = [], 0
     for path in paths:
         key = path.rstrip("/") or "/"
@@ -103,6 +107,78 @@ def _ls(state: HostState, args: list[str]) -> Derived | None:
             continue
         out.append(f"{path}:\n{body}\n" if len(paths) > 1 else body)
     return Derived(code, "".join(out))
+
+
+def _ls_recursive(state: HostState, paths: list[str]) -> Derived:
+    out, code = [], 0
+    for path in paths:
+        key = path.rstrip("/") or "/"
+        if not state.is_dir(key):
+            if key in state.files:
+                out.append(f"{path}\n")
+            else:
+                out.append(f"ls: cannot access '{path}': No such file or directory\n")
+                code = 2
+            continue
+        pending = [key]
+        while pending:
+            directory = pending.pop(0)
+            names = state.children(directory)
+            out.append(f"{directory}:\n" + "".join(f"{name}\n" for name in names) + "\n")
+            pending.extend(
+                f"{directory.rstrip('/')}/{name}"
+                for name in names
+                if state.is_dir(f"{directory.rstrip('/')}/{name}")
+            )
+    return Derived(code, "".join(out).removesuffix("\n"))
+
+
+def _find(state: HostState, args: list[str]) -> Derived | None:
+    options = dict(zip(args, args[1:], strict=False))  # each argument -> the one after it
+    name, kind, depth = options.get("-name"), options.get("-type"), options.get("-maxdepth")
+    values = {options[k] for k in ("-name", "-type", "-maxdepth") if k in options}
+    roots = [a for a in args if a.startswith("/") and a not in values]
+    if name is None or not roots or kind not in {None, "f", "d"}:
+        return None
+    limit = int(depth) if depth is not None and depth.isdigit() else None
+    out, code = [], 0
+    for root in roots:
+        top = root.rstrip("/") or "/"
+        if not state.is_dir(top):
+            out.append(f"find: '{root}': No such file or directory\n")
+            code = 1
+            continue
+        found: set[str] = set()
+        for path in state.files:
+            if not path.startswith(top.rstrip("/") + "/"):
+                continue
+            parts = path[len(top.rstrip("/")) + 1 :].split("/")
+            for index in range(len(parts)):
+                candidate = top.rstrip("/") + "/" + "/".join(parts[: index + 1])
+                is_file = index == len(parts) - 1
+                if parts[index] != name or (limit is not None and index + 1 > limit):
+                    continue
+                if kind == "f" and not is_file or kind == "d" and is_file:
+                    continue
+                found.add(candidate)
+        out.extend(f"{path}\n" for path in sorted(found))
+    return Derived(code, "".join(out))
+
+
+def _file(state: HostState, args: list[str]) -> Derived | None:
+    paths = _paths(args)
+    if not paths or len(paths) != len(args):
+        return None
+    out = []
+    for path in paths:
+        key = path.rstrip("/") or "/"
+        if key in state.files:
+            out.append(f"{path}: ASCII text\n")
+        elif state.is_dir(key):
+            out.append(f"{path}: directory\n")
+        else:
+            out.append(f"{path}: cannot open `{path}' (No such file or directory)\n")
+    return Derived(0, "".join(out))
 
 
 def _lines_option(args: list[str]) -> tuple[int, list[str]]:
@@ -248,6 +324,8 @@ def _service(state: HostState, args: list[str]) -> Derived | None:
 _HANDLERS = {
     "cat": _cat,
     "ls": _ls,
+    "find": _find,
+    "file": _file,
     "head": _head_or_tail("head"),
     "tail": _head_or_tail("tail"),
     "wc": _wc,

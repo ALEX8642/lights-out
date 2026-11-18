@@ -335,3 +335,41 @@ def test_dmesg_and_arp_and_netstat_variants() -> None:
         ("netstat", "-rn", "-f", "inet"),
     ]:
         assert target.run("mon.lan", argv).recorded is True, argv
+
+
+@pytest.mark.parametrize(
+    ("argv", "stdout", "exit_code"),
+    [
+        (("find", "/etc", "-name", "unbound.conf"), "/etc/unbound/unbound.conf\n", 0),
+        (("find", "/etc", "-name", "unbound", "-type", "d"), "/etc/unbound\n", 0),
+        (("find", "/etc", "-name", "unbound", "-type", "f"), "", 0),
+        (("find", "/etc", "-maxdepth", "1", "-name", "unbound.conf"), "", 0),
+        (("find", "/etc", "-name", "nope"), "", 0),
+        (
+            ("find", "/var/named", "-name", "x"),
+            "find: '/var/named': No such file or directory\n",
+            1,
+        ),
+    ],
+)
+def test_find_is_computed_from_the_recorded_files(
+    argv: tuple[str, ...], stdout: str, exit_code: int
+) -> None:
+    result = closed(*FILES).run("mon.lan", argv)
+    assert (result.exit_code, result.stdout, result.matched) == (exit_code, stdout, "derived")
+
+
+def test_file_says_text_directory_or_missing() -> None:
+    result = closed(*FILES).run("mon.lan", ("file", "/etc/hosts", "/etc/unbound", "/etc/nope"))
+    assert (result.exit_code, result.stdout, result.matched) == (
+        0,
+        "/etc/hosts: ASCII text\n/etc/unbound: directory\n"
+        "/etc/nope: cannot open `/etc/nope' (No such file or directory)\n",
+        "derived",
+    )
+
+
+def test_ls_recursive_lists_every_directory_below() -> None:
+    assert closed(*FILES).run("mon.lan", ("ls", "-lR", "/etc")).stdout == (
+        "/etc:\nhosts\nunbound\n\n/etc/unbound:\nunbound.conf\n"
+    )

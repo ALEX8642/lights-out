@@ -60,7 +60,7 @@ paths = [
 ]
 
 # An argument that makes another program run, whatever the program.
-any_args = "exec|-exec|--exec|-execdir|-ok|-delete|eval"
+any_args = "exec|-exec|--exec|-execdir|-ok|-okdir|-delete|-fprint|-fprint0|-fprintf|-fls|eval"
 
 [unsafe.first]
 # The verb (first argument) that would change state.
@@ -141,8 +141,25 @@ args = [
 max_args = 6
 
 [roles.linux.programs.ls]
-usage = "ls [-l -a -h -t -r -d -1] DIRECTORY..."
-args = ["-[lahtrdS1F]+", "/(etc|var|run|proc|opt|srv|tmp|usr/local)(/[A-Za-z0-9._@-]+)*/?"]
+usage = "ls [-l -a -h -t -r -d -R -1] DIRECTORY..."
+args = ["-[lahtrdRS1F]+", "/(etc|var|run|proc|opt|srv|tmp|usr/local)(/[A-Za-z0-9._@-]+)*/?"]
+max_args = 4
+
+[roles.linux.programs.find]
+usage = "find DIRECTORY... -name NAME [-type f|d|l] [-maxdepth 0-9] (under /etc, /opt, /var/log, /var/unbound, /run, /srv, /usr/local; no actions, no wildcards)"
+values = { "-name" = "[A-Za-z0-9_.@+][A-Za-z0-9_.@+-]*", "-type" = "f|d|l", "-maxdepth" = "[0-9]" }
+args = ["/(etc|opt|var/log|var/unbound|run|srv|usr/local)(/[A-Za-z0-9._@-]+)*/?"]
+require = ["-name"]
+max_args = 9
+
+[roles.linux.programs.file]
+usage = "file FILE... (same files as cat)"
+args = [
+    "/etc/[A-Za-z0-9._/@-]+",
+    "/opt/[A-Za-z0-9._/@-]+",
+    "/var/log/[A-Za-z0-9._/@-]+",
+    "/var/unbound/[A-Za-z0-9._/@-]+",
+]
 max_args = 4
 
 [roles.linux.programs.wc]
@@ -355,9 +372,21 @@ args = [
 ]
 max_args = 6
 
+[roles.firewall.programs.file]
+usage = "file FILE... (same files as cat)"
+args = [
+    "/etc/[A-Za-z0-9._/@-]+",
+    "/usr/local/etc/[A-Za-z0-9._/@-]+",
+    "/var/unbound/[A-Za-z0-9._/@-]+",
+    "/var/db/[A-Za-z0-9._/@-]+",
+    "/var/log/[A-Za-z0-9._/@-]+",
+    "/var/etc/[A-Za-z0-9._/@-]+",
+]
+max_args = 4
+
 [roles.firewall.programs.ls]
-usage = "ls [-l -a -h -t -r -d -1] DIRECTORY..."
-args = ["-[lahtrdS1F]+", "/(etc|var|tmp|usr/local/etc)(/[A-Za-z0-9._@-]+)*/?"]
+usage = "ls [-l -a -h -t -r -d -R -1] DIRECTORY..."
+args = ["-[lahtrdRS1F]+", "/(etc|var|tmp|usr/local/etc)(/[A-Za-z0-9._@-]+)*/?"]
 max_args = 4
 
 [roles.firewall.programs.ping]
@@ -374,7 +403,7 @@ args = ["-n", "-I", "[a-z0-9][a-z0-9.:-]*"]
 max_args = 9
 
 [roles.firewall.programs.drill]
-usage = "drill [-T] [-D] [-x] NAME [TYPE] [@SERVER]"
+usage = "drill [-T] [-D] [-x] NAME [TYPE] [@SERVER] (-v only prints the version, so it is not offered)"
 args = [
     "-T", "-D", "-x", "-4", "-6",
     "A|AAAA|PTR|MX|NS|SOA|TXT|CNAME|SRV|ANY|DS|DNSKEY",

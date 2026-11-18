@@ -296,6 +296,14 @@ def test_every_default_program_has_a_usage_line() -> None:
         ("firewall", "ifconfig vtnet0"),
         ("firewall", "ping -c 3 9.9.9.9"),
         ("firewall", "traceroute -n -m 10 1.1.1.1"),
+        # batch 1 refusal review
+        ("dns", "find /etc -name unbound.conf"),
+        ("linux", "find /etc /opt -name named.conf -type f"),
+        ("linux", "find /var/log -maxdepth 2 -name syslog"),
+        ("linux", "file /etc/resolv.conf"),
+        ("firewall", "file /var/db/wan-watchdog/snapshots"),
+        ("dns", "ls -lR /var/unbound"),
+        ("firewall", "ls -lR /var/unbound"),
     ],
 )
 def test_default_policy_allows_harmless_reads(role: str, command: str) -> None:
@@ -346,6 +354,17 @@ def test_default_policy_allows_harmless_reads(role: str, command: str) -> None:
         ("firewall", "cat /usr/local/etc/ssl/private/server.key"),
         ("dns", "systemctl stop adguardhome"),
         ("dns", "cat /etc/shadow"),
+        ("linux", "find /etc -name x -delete"),
+        ("linux", "find /etc -name x -exec cat"),
+        ("linux", "find /etc -name x -execdir id"),
+        ("linux", "find /etc -name x -ok id"),
+        ("linux", "find /etc -name x -okdir id"),
+        ("linux", "find /etc -name x -fprint /tmp/out"),
+        ("linux", "find /etc -name x -fprint0 /tmp/out"),
+        ("linux", "find /etc -name x -fprintf /tmp/out"),
+        ("linux", "find /etc -name x -fls /tmp/out"),
+        ("linux", "find /etc/ssl/private -name x"),
+        ("linux", "file /etc/shadow"),
     ],
 )
 def test_default_policy_refuses_state_changes_and_secrets_as_unsafe(
@@ -373,12 +392,24 @@ def test_default_policy_refuses_state_changes_and_secrets_as_unsafe(
         ("linux", "systemctl show unbound"),
         ("firewall", "ss -tulpn"),  # a Linux program on a BSD host
         ("firewall", "pfctl -a x -s rules"),
+        ("linux", "find /etc"),  # needs -name: no full listings of a tree
+        ("linux", "find / -name passwd"),  # only the inspected trees
+        ("linux", "find /home -name notes"),
+        ("linux", "find /etc -name x -maxdepth 99"),
+        ("linux", "find /etc -name x -newer /etc/hosts"),  # other predicates are not offered
+        ("linux", "file -s /dev/sda"),  # reads devices
+        ("firewall", "drill -v nas.lan @127.0.0.1"),  # -v only prints the version
+        ("firewall", "find /etc -name x"),  # not offered on the firewall yet
     ],
 )
 def test_default_policy_leaves_other_things_unlisted(role: str, command: str) -> None:
     decision = DEFAULT.check(role, command)
     assert isinstance(decision, Deny), command
     assert decision.kind == "unlisted", (command, decision.reason)
+
+
+def test_drill_usage_says_what_v_does() -> None:
+    assert "-v only prints" in DEFAULT.usage("firewall")["drill"]
 
 
 OPTION_LIKE = ["-f", "-rf", "--file", "-x", "--exec", "-K", "-delete"]
