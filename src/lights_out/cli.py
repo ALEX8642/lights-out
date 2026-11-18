@@ -284,6 +284,9 @@ def _energy(args: argparse.Namespace) -> int:
     print(
         f"\nidle baseline {args.idle_watts:g} W; per-drill rows in {args.batch_dir / 'energy.csv'}"
     )
+    return 0
+
+
 def _refusals(args: argparse.Namespace) -> int:
     groups = collect_refusals(args.dirs, args.scenarios)
     print(f"{'kind':<9} {'role':<9} {'program':<12} {'count':>5} {'drills':>6}  reason / examples")
