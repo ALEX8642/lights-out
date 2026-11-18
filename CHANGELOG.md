@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added (batches)
+
+- `lights-out batch`: many drills per scenario and temperature, one transcript each, a resumable
+  `summary.jsonl`/`summary.csv`, and a table with correct as k/n and a Wilson 95% interval.
+  Decision record 0010 (#36).
+
 ### Added
 
 - Fix tool in drills: scenarios offer scripted fixes with a risk class, preconditions and
