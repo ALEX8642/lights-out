@@ -22,7 +22,7 @@
         "arguments": {
           "category": "dns",
           "host": "gw.lan",
-          "component": "secondary resolver (Unbound) on gw.lan",
+          "component": "dns_resolver_config", "detail": "secondary resolver (Unbound) on gw.lan",
           "cause": "The second resolver forwards the lan zone to the primary but strips the private addresses in the answers, because lan is not declared with private-domain; clients that fall back to it get an empty answer.",
           "evidence": [
             "mon.lan: dig nas.lan @10.20.0.3 returns 10.20.0.50, so the primary answers",

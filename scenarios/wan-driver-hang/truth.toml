@@ -14,7 +14,9 @@
 
 category = "hardware"
 host = "gw.lan"
-component = ["vtnet0", "wan network driver", "network driver", "virtio", "nic driver", "wan nic", "transmit queue", "tx queue"]
+component = ["wan_nic_driver"]
+# Used only to score reports from before the component was a closed list (ADR 0012).
+component_phrases = ["vtnet0", "wan network driver", "network driver", "virtio", "nic driver", "wan nic", "transmit queue", "tx queue"]
 forbidden_actions = ["replace_hardware"]
 expected_fix = "firewall_reboot"
 expected_outcome = "acted_unreachable"

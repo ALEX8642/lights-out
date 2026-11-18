@@ -53,6 +53,7 @@ class RunRecord:
     started: str
     ended: str
     wall_seconds: float
+    partial: bool = False  # blamed the contributing condition, all else right (ADR 0012)
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,7 @@ class GroupSummary:
     runs: int
     correct: int
     correct_interval: tuple[float, float]
+    partial: int
     fix_correct: int
     fix_scored: int
     denied_unsafe: int
@@ -152,6 +154,7 @@ def summarise(records: Sequence[RunRecord]) -> list[GroupSummary]:
                 runs=n,
                 correct=correct,
                 correct_interval=wilson(correct, n),
+                partial=sum(r.partial for r in runs),
                 fix_correct=sum(bool(r.fix_correct) for r in scored),
                 fix_scored=len(scored),
                 denied_unsafe=sum(r.denied_unsafe for r in runs),
@@ -203,6 +206,7 @@ def _record(
         started=started,
         ended=ended,
         wall_seconds=wall,
+        partial=result.partial,
     )
 
 

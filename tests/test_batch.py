@@ -114,3 +114,30 @@ def test_cli_batch_rejects_bad_repeats(tmp_path: Path, value: str) -> None:
         main(["batch", str(SCENARIOS[0]), "--scripted", "--repeats", value, "--out", str(tmp_path)])
         == 2
     )
+
+
+def test_partial_credit_is_counted_apart_from_correct() -> None:
+    def rec(correct: bool, partial: bool) -> RunRecord:
+        return RunRecord(
+            scenario="a", temperature=0.0, repeat=1, transcript="t", correct=correct,
+            fix_correct=None, stop_reason="report", steps=1, prompt_tokens=0,
+            completion_tokens=0, denied_unsafe=0, denied_unlisted=0, tool_errors=0,
+            key_facts_found=0, key_facts_total=0, evidence_run=0, evidence_total=0,
+            started="2026-01-01T00:00:00+00:00", ended="2026-01-01T00:01:00+00:00",
+            wall_seconds=60.0, partial=partial,
+        )  # fmt: skip
+
+    (group,) = summarise([rec(True, False), rec(False, True), rec(False, True), rec(False, False)])
+    assert (group.correct, group.partial) == (1, 2)
+    assert group.correct_interval == pytest.approx(wilson(1, 4))
+
+
+def test_a_summary_line_from_before_partial_credit_still_loads(tmp_path: Path) -> None:
+    run_batch(SCENARIOS[:1], POLICY, Counting(), tmp_path, repeats=1, temperatures=(0.0,))
+    summary = tmp_path / "summary.jsonl"
+    line = json.loads(summary.read_text())
+    del line["partial"]
+    summary.write_text(json.dumps(line) + "\n")
+    again = Counting()
+    (record,) = run_batch(SCENARIOS[:1], POLICY, again, tmp_path, repeats=1, temperatures=(0.0,))
+    assert again.started == 0 and record.partial is False

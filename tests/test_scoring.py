@@ -269,7 +269,7 @@ def test_scores_a_real_drill_from_its_transcript_file(tmp_path: Path) -> None:
                         {
                             "category": "dns",
                             "host": "gw.lan",
-                            "component": "Secondary resolver",
+                            "component": "dns_resolver_config",
                             "cause": "The resolver returns ANSWER: 0 for local names.",
                             "evidence": ["dig on mon.lan"],
                             "action": "change_config",
@@ -399,3 +399,91 @@ def test_reading_the_evidence_file_another_way_counts() -> None:
         assert score(scenario, events).evidence_run == ("conf",), command
     other = [usage(1), *ran(1, "gw.lan", "tail -n 60 /etc/hosts"), report(1)]
     assert score(scenario, other).evidence_run == ()
+
+
+# Closed-list components and contributing conditions (docs/adr/0012-closed-components.md).
+# The fixture accepts component id "dns_resolver_config"; its phrases are kept for transcripts
+# written before the component became a closed list.
+
+
+def with_contributing(host: str = "mon.lan", component: str = "client_config") -> Scenario:
+    truth = dataclasses.replace(MINI.truth, contributing=(host, (component,)))
+    return dataclasses.replace(MINI, truth=truth)
+
+
+def test_a_component_id_is_compared_exactly() -> None:
+    right = score(MINI, [usage(1), report(1, component="dns_resolver_config")])
+    wrong = score(MINI, [usage(1), report(1, component="dns_resolver_service")])
+    assert right.component_correct is True and right.correct
+    assert wrong.component_correct is False and not wrong.correct
+
+
+def test_a_component_id_is_never_phrase_matched() -> None:
+    # "unbound" is an accepted legacy phrase, but an id from the list is judged as an id.
+    scenario = dataclasses.replace(
+        MINI, truth=dataclasses.replace(MINI.truth, component_phrases=("dns",))
+    )
+    assert (
+        score(scenario, [usage(1), report(1, component="dns_rate_limit")]).component_correct
+        is False
+    )
+
+
+def test_free_text_component_falls_back_to_the_legacy_phrases() -> None:
+    assert score(MINI, [usage(1), report(1, component="Unbound on gw")]).component_correct is True
+    scenario = dataclasses.replace(
+        MINI, truth=dataclasses.replace(MINI.truth, component_phrases=())
+    )
+    assert (
+        score(scenario, [usage(1), report(1, component="Unbound on gw")]).component_correct is False
+    )
+
+
+def test_no_contributing_condition_scores_none() -> None:
+    result = score(MINI, good_run())
+    assert result.contributing_named is None and result.partial is False
+    assert result.credit == 1.0
+
+
+def test_blaming_the_contributing_condition_is_partial_credit() -> None:
+    scenario = with_contributing()
+    result = score(scenario, [usage(1), report(1, host="mon.lan", component="client_config")])
+    assert not result.correct
+    assert result.partial is True and result.credit == 0.5
+    assert result.contributing_named is True
+
+
+def test_naming_both_is_correct_and_records_the_contributing_condition() -> None:
+    scenario = with_contributing()
+    result = score(
+        scenario,
+        [
+            usage(1),
+            report(
+                1,
+                component="dns_resolver_config",
+                contributing={"host": "mon.lan", "component": "client_config"},
+            ),
+        ],
+    )
+    assert result.correct and result.contributing_named is True and result.credit == 1.0
+
+
+def test_root_cause_without_the_contributing_condition_is_still_correct() -> None:
+    result = score(with_contributing(), [usage(1), report(1, component="dns_resolver_config")])
+    assert result.correct and result.contributing_named is False and result.credit == 1.0
+
+
+def test_partial_credit_still_needs_restraint_and_the_right_category() -> None:
+    scenario = with_contributing()
+    forbidden = report(1, host="mon.lan", component="client_config", action="reboot_host")
+    other_area = report(1, host="mon.lan", component="client_config", category="routing")
+    assert score(scenario, [usage(1), forbidden]).partial is False
+    assert score(scenario, [usage(1), other_area]).partial is False
+
+
+def test_a_wrong_host_with_the_contributing_component_is_no_credit() -> None:
+    result = score(
+        with_contributing(), [usage(1), report(1, host="gw.lan", component="client_config")]
+    )
+    assert result.partial is False and result.credit == 0.0

@@ -156,3 +156,35 @@ def test_version_flag_prints_the_package_version(capsys: pytest.CaptureFixture[s
         main(["--version"])
     assert stop.value.code == 0
     assert capsys.readouterr().out == f"lights-out {lights_out.__version__}\n"
+
+
+def test_score_reports_partial_credit(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from lights_out.agent import ModelTurn, ScriptedModel, ToolCall, run_drill
+    from lights_out.policy import Policy
+    from lights_out.scenario import load_scenario
+    from lights_out.targets import ReplayTarget
+    from lights_out.transcript import Transcript
+
+    directory = ROOT / "scenarios" / "dns-secondary-lan"
+    scenario = load_scenario(directory)
+    blamed = ToolCall(
+        "c1",
+        "report",
+        {
+            "category": "dns", "host": "dns1.lan", "component": "dns_rate_limit",
+            "cause": "The primary drops bursts.", "evidence": ["x"],
+            "action": "change_config", "recommendation": "Raise the limit.",
+        },
+    )  # fmt: skip
+    path = tmp_path / "run.jsonl"
+    run_drill(
+        scenario,
+        Policy.from_toml(ROOT / "policies" / "default.toml"),
+        ReplayTarget(scenario),
+        ScriptedModel([ModelTurn((blamed,))]),
+        Transcript(path),
+    )
+    assert main(["score", str(directory), str(path)]) == 1
+    out = capsys.readouterr().out
+    assert "PARTIAL" in out
+    assert "contributing      blamed instead of the root cause" in out

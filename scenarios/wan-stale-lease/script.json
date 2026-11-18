@@ -28,7 +28,7 @@
         "arguments": {
           "category": "wan",
           "host": "gw.lan",
-          "component": "WAN DHCP lease on gw.lan",
+          "component": "wan_dhcp_lease", "detail": "WAN DHCP lease on gw.lan",
           "cause": "After the modem rebooted, the firewall kept its old DHCP lease because its virtual WAN interface never saw the link drop, so it never renewed, and the provider drops traffic until it sees a new DHCP request.",
           "evidence": [
             "gw.lan: ping -c 3 198.51.100.1 shows 100.0% packet loss to the provider's gateway",

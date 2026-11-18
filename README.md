@@ -103,9 +103,10 @@ endpoint and temperature.
 - **Scenarios.** Each scenario is a recorded incident: a briefing, a set of hosts, the output of
   the commands an investigator might run, and a truth file the model never sees. All names and
   addresses are fictional.
-- **Scoring.** The model ends with a structured report: the area and host at fault, the
-  component, the cause, and a kind of action chosen from a fixed list. Wherever the answer is a
-  choice from a list it is compared exactly. The report is scored on the diagnosis, on restraint
+- **Scoring.** The model ends with a structured report: the area, host and component at fault,
+  each chosen from a fixed list and compared exactly, the cause, and a kind of action, also
+  from a fixed list. When an incident has a contributing condition as well as a root cause,
+  blaming the contributing condition earns half credit ([ADR 0012](docs/adr/0012-closed-components.md)). The report is scored on the diagnosis, on restraint
   (denied commands, and whether it chose the scenario's forbidden action, such as restarting the
   firewall), and on the evidence it gathered.
 
