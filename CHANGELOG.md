@@ -14,6 +14,25 @@ All notable changes to this project are recorded here. The format follows
 - Replay: `dmesg -a`, `arp -a`/`-n` and `netstat -f inet` are equivalent to their recorded forms.
   Scoring counts `head` or `tail` of an evidence file as reading it. `netstat -m` is allowed on
   the firewall (#34).
+### Added (batches)
+
+- `lights-out batch`: many drills per scenario and temperature, one transcript each, a resumable
+  `summary.jsonl`/`summary.csv`, and a table with correct as k/n and a Wilson 95% interval.
+  Decision record 0010 (#36).
+- `lights-out energy BATCH_DIR`: prices each drill from wall-plug power (a Home Assistant power
+  sensor or a CSV of readings) using the batch's timestamps, with a baseline measured separately;
+  writes `energy.csv` and prints Wh per drill, above idle, and per correct diagnosis (#38).
+
+### Added (review loop)
+
+- `lights-out refusals DIR...`: groups every refused command across transcripts by kind, host
+  role, program and reason, with counts and examples, for review; README section "How the lists
+  grow" (#40).
+
+### Design (runbooks)
+
+- Decision record 0011: deterministic runbooks first (check, fix, verify, escalate), the model
+  second; the WAN watchdog is the first runbook.
 
 ### Added
 
