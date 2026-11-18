@@ -15,6 +15,12 @@ and reviewed.
 
 `main` always passes CI. Nothing is pushed to it directly after the initial scaffold commit.
 
+## Changelog
+
+Do not edit `CHANGELOG.md` in a pull request. Add a fragment instead,
+`changes/<issue>.<kind>.md`, holding the changelog bullet (see `changes/README.md`). Fragments are
+assembled into `CHANGELOG.md` at release, so pull requests never conflict over it.
+
 ## Commit and pull request titles
 
 [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`, with types
