@@ -20,6 +20,7 @@ from lights_out.batch import GroupSummary, ModelFactory, RunRecord, run_batch, s
 from lights_out.endpoint import OpenAIClient
 from lights_out.energy import CsvSource, DrillEnergy, HomeAssistantSource, PowerSource, price_batch
 from lights_out.policy import Allow, Policy, PolicyError
+from lights_out.review import collect_refusals
 from lights_out.scenario import ScenarioError, load_scenario
 from lights_out.scoring import Score, score
 from lights_out.targets import ReplayTarget
@@ -100,6 +101,12 @@ def _parser() -> argparse.ArgumentParser:
         "--idle-watts", type=float, required=True, help="baseline measured in a quiet window"
     )
     energy.set_defaults(handler=_energy)
+    refusals = commands.add_parser("refusals", help="group refused commands for review")
+    refusals.add_argument("dirs", type=Path, nargs="+", metavar="DIR", help="transcript dirs")
+    refusals.add_argument(
+        "--scenarios", type=Path, default=Path("scenarios"), help="where scenario dirs live"
+    )
+    refusals.set_defaults(handler=_refusals)
 
     score_parser = commands.add_parser("score", help="score a transcript against a scenario")
     score_parser.add_argument("scenario", type=Path, help="scenario directory")
@@ -277,6 +284,13 @@ def _energy(args: argparse.Namespace) -> int:
     print(
         f"\nidle baseline {args.idle_watts:g} W; per-drill rows in {args.batch_dir / 'energy.csv'}"
     )
+def _refusals(args: argparse.Namespace) -> int:
+    groups = collect_refusals(args.dirs, args.scenarios)
+    print(f"{'kind':<9} {'role':<9} {'program':<12} {'count':>5} {'drills':>6}  reason / examples")
+    for g in groups:
+        print(f"{g.kind:<9} {g.role:<9} {g.program:<12} {g.count:>5} {g.drills:>6}  {g.reason}")
+        for example in g.examples:
+            print(f"{'':<46}  {example}")
     return 0
 
 
