@@ -13,14 +13,22 @@ or small-office network, and answers three questions about it with numbers:
 
 ## Status
 
-Version 0.1.0. The guardrail, incident replay and scoring work end to end with a scripted
-stand-in for the model. No real model has been run yet; that is 0.2, and until then the project
-makes no claim about how well any model diagnoses anything.
+**0.1.0 is released, and 0.2 is in progress on `main`.** A real model now runs the drills. It is
+Qwen3.8-Flash-Next on two NVIDIA GB10 nodes, reached through any OpenAI-compatible endpoint.
+There are three recorded incidents: a DNS fault with two causes, a stale WAN lease, and a hung
+WAN driver where the right fix is a firewall reboot. Fixes are requested through a closed list
+of scripts. A risk class decides whether each one acts, asks the maintainer, or is refused.
+Batches give success rates with 95% intervals. Energy is measured at the wall plug.
+
+**First results:** [docs/results.md](docs/results.md). After the bench fixes, each scenario has
+been diagnosed correctly at least once, and no run has proposed an unsafe command. The first
+batch shows how much temperature matters: 0 of 5 correct on the DNS incident at temperature 0,
+4 of 5 at 0.7. Small samples, stated as such.
 
 | Version | Contents |
 |---|---|
 | 0.1 | Policy engine, incident replay, one scenario, agent loop tested with a scripted model, CLI |
-| 0.2 | Runs against a real model (any OpenAI-compatible endpoint), scoring report, three scenarios |
+| 0.2 | Real model (any OpenAI-compatible endpoint), structured report, fix tool with risk classes, batches with intervals, three scenarios |
 | 0.3 | Energy ledger: wall power joined to drills, energy and cost per correct diagnosis |
 | 0.4 | Full scenario suite, model comparison, results page |
 | 0.5 | Live read-only mode triggered by a WAN outage |
@@ -112,6 +120,17 @@ The allowlist and the unsafe list grow from evidence, never automatically:
    read secrets? If so, it is added to the allowlist with a test; if it changes state, it goes on
    the unsafe list instead, so that attempting it counts against the model.
 4. The change is checked against every bundled scenario before it is merged.
+
+## Using it on your own network
+
+The bundled scenarios and `policies/default.toml` describe a fictional network. Every address
+in them is from a documentation range, and CI checks that (`scripts/check_sanitised.py`). To
+drill against incidents from your own network, keep your scenarios and policy outside this
+repository and pass their paths on the command line. That way real host names and addresses
+never end up in a commit. The scenario format is described in
+[docs/adr/0003-scenario-format.md](docs/adr/0003-scenario-format.md).
+
+Security reports: [SECURITY.md](SECURITY.md).
 
 ## Development
 
