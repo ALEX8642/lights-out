@@ -35,6 +35,38 @@ ACTIONS = frozenset(
     }
 )
 
+# The parts a fault can be in. A closed list, so the report's component is a choice compared
+# exactly, like the host and the action (docs/adr/0012-closed-components.md). Deliberately
+# generic and shared by every scenario: a list made per scenario would hint at the answer.
+COMPONENTS = frozenset(
+    {
+        "modem",  # the provider's modem or ONT
+        "provider_network",  # beyond the modem: the ISP
+        "wan_link",  # cable, port or link negotiation on the firewall's WAN side
+        "wan_dhcp_lease",  # the firewall's WAN address lease from the provider
+        "wan_nic_driver",  # the firewall's WAN network interface or its driver
+        "firewall_rules",
+        "nat",
+        "routing_table",
+        "vpn",
+        "dhcp_server",  # addresses handed out on the local network
+        "dns_resolver_config",
+        "dns_resolver_service",  # the resolver process itself: crashed, hung, overloaded
+        "dns_rate_limit",
+        "dns_records",  # the zone data: a wrong or missing record
+        "time_sync",
+        "certificate",
+        "disk",
+        "memory",
+        "power",
+        "service_config",  # another service's configuration
+        "service_process",  # another service's process: crashed, hung, not started
+        "monitoring_config",  # the monitor itself is wrong
+        "client_config",  # the client's own settings
+        "other",
+    }
+)
+
 # How the harness may handle a fix (docs/adr/0009-fix-table-and-approval.md).
 FIX_CLASSES = frozenset({"act_alone", "ask_then_act", "approval_only"})
 REACHABILITY = frozenset({"online", "home", "away"})  # can the maintainer be asked, and how
@@ -110,12 +142,17 @@ class Truth:
 
     category: str
     host: str  # the host at fault, or EXTERNAL
-    component: tuple[str, ...]  # accepted phrases for the part at fault
+    component: tuple[str, ...]  # accepted ids from COMPONENTS for the part at fault
     key_facts: tuple[KeyFact, ...]
     forbidden_actions: tuple[str, ...]  # entries of ACTIONS that are the scenario's trap
     expected_fix: str | None = None  # a fix id, NO_FIX, or None when the scenario offers no fixes
     expected_outcome: str | None = None  # one of OUTCOMES, with an expected fix id
     forbidden_fixes: tuple[str, ...] = ()
+    # Phrases for the part at fault, used only for reports written before the component was a
+    # closed list (their component is free text).
+    component_phrases: tuple[str, ...] = ()
+    # A condition that made the fault show without being it: (host, accepted component ids).
+    contributing: tuple[str, tuple[str, ...]] | None = None
 
 
 @dataclass(frozen=True)
@@ -318,13 +355,24 @@ def _state(value: object, fixes: tuple[Fix, ...], where: str) -> FixState | None
     return FixState(reachability, approval, dict(values))
 
 
+def _components(data: Mapping[str, object], where: str) -> tuple[str, ...]:
+    ids = _texts(data, "component", where, allow_empty=False)
+    unknown = [item for item in ids if item not in COMPONENTS]
+    if unknown:
+        raise ScenarioError(
+            f"{where}: component: {', '.join(unknown)} not in {', '.join(sorted(COMPONENTS))}"
+        )
+    return ids
+
+
 def _truth(data: Mapping[str, object], hosts: set[str], fixes: tuple[Fix, ...] = ()) -> Truth:
     where = "truth.toml"
     _only_keys(
         data,
         {
-            "category", "host", "component", "forbidden_actions", "key_facts",
-            "expected_fix", "expected_outcome", "forbidden_fixes",
+            "category", "host", "component", "component_phrases", "contributing",
+            "forbidden_actions", "key_facts", "expected_fix", "expected_outcome",
+            "forbidden_fixes",
         },
         where,
     )  # fmt: skip
@@ -336,6 +384,21 @@ def _truth(data: Mapping[str, object], hosts: set[str], fixes: tuple[Fix, ...] =
     fault_host = _text(data, "host", where)
     if fault_host != EXTERNAL and fault_host not in hosts:
         raise ScenarioError(f"{where}: host: unknown host: {fault_host}")
+    component = _components(data, where)
+    contributing: tuple[str, tuple[str, ...]] | None = None
+    table = data.get("contributing")
+    if table is not None:
+        spot = f"{where}: contributing"
+        if not isinstance(table, Mapping):
+            raise ScenarioError(f"{spot} must be a table")
+        _only_keys(table, {"host", "component"}, spot)
+        other_host = _text(table, "host", spot)
+        if other_host != EXTERNAL and other_host not in hosts:
+            raise ScenarioError(f"{spot}: unknown host: {other_host}")
+        other = _components(table, spot)
+        if other_host == fault_host and set(other) & set(component):
+            raise ScenarioError(f"{spot} is the same as the root cause")
+        contributing = (other_host, other)
     forbidden = _texts(data, "forbidden_actions", where, allow_empty=True)
     unknown = [action for action in forbidden if action not in ACTIONS]
     if unknown:
@@ -381,7 +444,9 @@ def _truth(data: Mapping[str, object], hosts: set[str], fixes: tuple[Fix, ...] =
     return Truth(
         category=category,
         host=fault_host,
-        component=_texts(data, "component", where, allow_empty=False),
+        component=component,
+        component_phrases=_texts(data, "component_phrases", where, allow_empty=True),
+        contributing=contributing,
         key_facts=tuple(facts),
         forbidden_actions=forbidden,
         expected_fix=expected_fix if isinstance(expected_fix, str) else None,

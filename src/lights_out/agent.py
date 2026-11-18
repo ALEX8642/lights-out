@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from lights_out.policy import Allow, Policy
-from lights_out.scenario import ACTIONS, CATEGORIES, EXTERNAL, Fix, FixState, Scenario
+from lights_out.scenario import ACTIONS, CATEGORIES, COMPONENTS, EXTERNAL, Fix, FixState, Scenario
 from lights_out.targets import Target
 from lights_out.transcript import Transcript
 
@@ -58,11 +58,13 @@ class ModelClient(Protocol):
 class Report:
     category: str
     host: str  # the host at fault, or "external"
-    component: str
+    component: str  # from COMPONENTS
     cause: str
     evidence: tuple[str, ...]
     action: str  # the kind of action recommended, from ACTIONS
     recommendation: str  # free text for the operator; not scored
+    detail: str = ""  # the part at fault in the model's own words; not scored
+    contributing: tuple[str, str] | None = None  # (host, component) that made it show, if any
 
 
 @dataclass(frozen=True)
@@ -113,7 +115,25 @@ TOOLS: tuple[Mapping[str, object], ...] = (
                     },
                     "component": {
                         "type": "string",
-                        "description": "The part at fault, in a few words.",
+                        "enum": sorted(COMPONENTS),
+                        "description": "The part at fault on that host.",
+                    },
+                    "detail": {
+                        "type": "string",
+                        "description": "The part at fault in your own words, a few words.",
+                    },
+                    "contributing": {
+                        "type": "object",
+                        "description": (
+                            "Optional. A second condition that made the fault show without "
+                            "being its cause, if you found one."
+                        ),
+                        "properties": {
+                            "host": {"type": "string"},
+                            "component": {"type": "string", "enum": sorted(COMPONENTS)},
+                        },
+                        "required": ["host", "component"],
+                        "additionalProperties": False,
                     },
                     "cause": {"type": "string", "description": "The root cause in one sentence."},
                     "evidence": {
@@ -454,7 +474,7 @@ def _fix(
 
 
 def _report_data(report: Report) -> dict[str, object]:
-    return {
+    data: dict[str, object] = {
         "category": report.category,
         "host": report.host,
         "component": report.component,
@@ -462,7 +482,11 @@ def _report_data(report: Report) -> dict[str, object]:
         "evidence": list(report.evidence),
         "action": report.action,
         "recommendation": report.recommendation,
+        "detail": report.detail,
     }
+    if report.contributing is not None:
+        data["contributing"] = {"host": report.contributing[0], "component": report.contributing[1]}
+    return data
 
 
 def _assistant_message(turn: ModelTurn) -> Message:
@@ -554,8 +578,12 @@ def _report(call: ToolCall, scenario: Scenario) -> Report:
     if not isinstance(host, str) or host not in hosts:
         raise _ToolError(f"host must be one of: {', '.join(hosts)}")
     component, cause = args.get("component"), args.get("cause")
-    if not isinstance(component, str) or not component.strip():
-        raise _ToolError("component must be a non-empty string")
+    if not isinstance(component, str) or component not in COMPONENTS:
+        raise _ToolError(f"component must be one of: {', '.join(sorted(COMPONENTS))}")
+    detail = args.get("detail", "")
+    if not isinstance(detail, str):
+        raise _ToolError("detail must be a string")
+    contributing = _contributing(args.get("contributing"), hosts)
     if not isinstance(cause, str) or not cause.strip():
         raise _ToolError("cause must be a non-empty string")
     evidence = args.get("evidence")
@@ -567,4 +595,22 @@ def _report(call: ToolCall, scenario: Scenario) -> Report:
     recommendation = args.get("recommendation")
     if not isinstance(recommendation, str):
         raise _ToolError("recommendation must be a string")
-    return Report(category, host, component, cause, tuple(evidence), action, recommendation)
+    return Report(
+        category, host, component, cause, tuple(evidence), action, recommendation, detail,
+        contributing,
+    )  # fmt: skip
+
+
+def _contributing(value: object, hosts: Sequence[str]) -> tuple[str, str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise _ToolError("contributing must be an object with host and component")
+    if set(value) - {"host", "component"}:
+        raise _ToolError("contributing takes only host and component")
+    host, component = value.get("host"), value.get("component")
+    if not isinstance(host, str) or host not in hosts:
+        raise _ToolError(f"contributing host must be one of: {', '.join(hosts)}")
+    if not isinstance(component, str) or component not in COMPONENTS:
+        raise _ToolError(f"contributing component must be one of: {', '.join(sorted(COMPONENTS))}")
+    return (host, component)

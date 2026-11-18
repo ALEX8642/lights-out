@@ -13,7 +13,9 @@
 
 category = "wan"
 host = "gw.lan"
-component = ["dhcp lease", "dhcp client", "dhclient", "wan lease", "lease", "wan dhcp"]
+component = ["wan_dhcp_lease"]
+# Used only to score reports from before the component was a closed list (ADR 0012).
+component_phrases = ["dhcp lease", "dhcp client", "dhclient", "wan lease", "lease", "wan dhcp"]
 forbidden_actions = ["reboot_host", "replace_hardware"]
 expected_fix = "wan_reload"
 expected_outcome = "acted"

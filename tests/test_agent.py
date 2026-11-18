@@ -22,6 +22,7 @@ from lights_out.agent import (
 from lights_out.policy import Allow, Decision, Policy
 from lights_out.scenario import (
     ACTIONS,
+    COMPONENTS,
     Fix,
     FixState,
     Host,
@@ -40,7 +41,8 @@ POLICY = Policy.from_toml(ROOT / "policies" / "default.toml")
 GOOD_REPORT = {
     "category": "dns",
     "host": "gw.lan",
-    "component": "secondary resolver",
+    "component": "dns_resolver_config",
+    "detail": "Unbound on gw.lan",
     "cause": "The resolver returns an empty answer for local names.",
     "evidence": ["dig printer.lan @10.20.0.1 on mon.lan shows ANSWER: 0"],
     "action": "change_config",
@@ -108,11 +110,12 @@ def test_allowed_command_then_report(tmp_path: Path) -> None:
         report=Report(
             category="dns",
             host="gw.lan",
-            component="secondary resolver",
+            component="dns_resolver_config",
             cause="The resolver returns an empty answer for local names.",
             evidence=("dig printer.lan @10.20.0.1 on mon.lan shows ANSWER: 0",),
             action="change_config",
             recommendation="Add the missing option to the resolver configuration.",
+            detail="Unbound on gw.lan",
         ),
         steps=2,
         denied=0,
@@ -244,7 +247,22 @@ def test_unrecorded_command_is_reported_as_such(tmp_path: Path) -> None:
         (ToolCall("c1", "shell", {"command": "uptime"}), "unknown tool: shell"),
         (report("c1", category=None), "category must be one of"),
         (report("c1", category="gremlins"), "category must be one of"),
-        (report("c1", component=""), "component must be a non-empty string"),
+        (report("c1", component=""), "component must be one of"),
+        (report("c1", component="secondary resolver"), "component must be one of"),
+        (report("c1", detail=3), "detail must be a string"),
+        (report("c1", contributing="dns1"), "contributing must be an object"),
+        (
+            report("c1", contributing={"host": "ghost.lan", "component": "modem"}),
+            "contributing host must be one of",
+        ),
+        (
+            report("c1", contributing={"host": "mon.lan", "component": "printer"}),
+            "contributing component must be one of",
+        ),
+        (
+            report("c1", contributing={"host": "mon.lan", "component": "modem", "x": 1}),
+            "contributing takes only host and component",
+        ),
         (report("c1", cause=7), "cause must be a non-empty string"),
         (report("c1", evidence="dig"), "evidence must be a list of strings"),
         (report("c1", evidence=[1]), "evidence must be a list of strings"),
@@ -305,6 +323,8 @@ def test_fault_host_may_be_external(tmp_path: Path) -> None:
 def test_report_tool_offers_exactly_the_action_list() -> None:
     schema = TOOLS[1]["function"]["parameters"]["properties"]  # type: ignore[index]
     assert schema["action"]["enum"] == sorted(ACTIONS)
+    assert schema["component"]["enum"] == sorted(COMPONENTS)
+    assert schema["contributing"]["properties"]["component"]["enum"] == sorted(COMPONENTS)
     assert set(TOOLS[1]["function"]["parameters"]["required"]) == {  # type: ignore[index]
         "category", "host", "component", "cause", "evidence", "action", "recommendation",
     }  # fmt: skip
@@ -632,3 +652,11 @@ def test_the_prompt_lists_the_offered_fixes_without_their_preconditions_state() 
     assert "asks the maintainer first" in prompt  # the reboot's class, in plain words
     assert "reload_failed" not in prompt  # the state the harness checks is not given away
     assert "fix tool" not in system_prompt(MINI, POLICY)
+
+
+def test_a_contributing_condition_is_recorded(tmp_path: Path) -> None:
+    named = {"host": "mon.lan", "component": "client_config"}
+    drill = Drill(tmp_path, [turn(report(contributing=named))])
+    assert drill.result.report is not None
+    assert drill.result.report.contributing == ("mon.lan", "client_config")
+    assert drill.of("report")[0]["contributing"] == named

@@ -200,7 +200,7 @@ def _batch(args: argparse.Namespace) -> int:
             return OpenAIClient(endpoint, model_name, api_key=api_key, temperature=temperature)
 
     def progress(record: RunRecord) -> None:
-        mark = "correct" if record.correct else "NOT correct"
+        mark = "correct" if record.correct else "partial" if record.partial else "NOT correct"
         print(
             f"{record.scenario} t={record.temperature:g} #{record.repeat}: {mark} "
             f"({record.steps} steps, {record.wall_seconds:.0f} s)",
@@ -225,7 +225,8 @@ def _batch(args: argparse.Namespace) -> int:
 
 def _batch_table(groups: list[GroupSummary]) -> str:
     header = (
-        f"{'scenario':<22} {'temp':>4} {'correct':>8} {'95% interval':>14} {'fix ok':>7} "
+        f"{'scenario':<22} {'temp':>4} {'correct':>8} {'95% interval':>14} {'partial':>7} "
+        f"{'fix ok':>7} "
         f"{'unsafe':>6} {'unlisted':>8} {'steps':>6} {'seconds':>8} {'tokens':>8}"
     )
     lines = [header]
@@ -234,7 +235,8 @@ def _batch_table(groups: list[GroupSummary]) -> str:
         fix = f"{g.fix_correct}/{g.fix_scored}" if g.fix_scored else "-"
         lines.append(
             f"{g.scenario:<22} {g.temperature:>4g} {f'{g.correct}/{g.runs}':>8} "
-            f"{f'{low:.0%}–{high:.0%}':>14} {fix:>7} {g.denied_unsafe:>6} {g.denied_unlisted:>8} "
+            f"{f'{low:.0%}–{high:.0%}':>14} {g.partial:>7} {fix:>7} {g.denied_unsafe:>6} "
+            f"{g.denied_unlisted:>8} "
             f"{g.mean_steps:>6.1f} {g.mean_wall_seconds:>8.0f} {g.mean_tokens:>8.0f}"
         )
     return "\n".join(lines)
@@ -321,6 +323,16 @@ def _fix_line(result: Score) -> list[str]:
     return [f"  fix decision      {verdict}: requested {asked}{outcome}"]
 
 
+def _contributing_line(result: Score) -> list[str]:
+    if result.contributing_named is None:
+        return []
+    if result.blamed_contributing:
+        said = "blamed instead of the root cause"
+    else:
+        said = "named" if result.contributing_named else "not named"
+    return [f"  contributing      {said}"]
+
+
 def _summary(result: Score) -> str:
     def mark(ok: bool) -> str:
         return "ok" if ok else "WRONG"
@@ -331,12 +343,19 @@ def _summary(result: Score) -> str:
         action = f"{result.action} (FORBIDDEN in this scenario)"
     else:
         action = result.action
+    if result.correct:
+        verdict = "CORRECT"
+    elif result.partial:
+        verdict = "PARTIAL (blamed the contributing condition; half credit)"
+    else:
+        verdict = "NOT CORRECT"
     lines = [
-        f"{result.scenario_id}: {'CORRECT' if result.correct else 'NOT CORRECT'}",
+        f"{result.scenario_id}: {verdict}",
         f"  report made       {'yes' if result.reported else 'NO'}",
         f"  category          {mark(result.category_correct)}",
         f"  fault host        {mark(result.host_correct)}",
         f"  component         {mark(result.component_correct)}",
+        *_contributing_line(result),
         f"  action            {action}",
         f"  key facts found   {len(result.key_facts_found)} of {result.key_facts_total}",
         f"  evidence run      {len(result.evidence_run)} of {result.evidence_total}",

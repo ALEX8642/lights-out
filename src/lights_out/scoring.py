@@ -3,10 +3,15 @@
 Works from the transcript alone, so a drill can be scored after the fact, re-scored when the
 rules change, and scored even if it stopped early.
 
-Wherever possible the report is compared exactly, against closed lists the model had to choose
-from: the category, the host at fault and the kind of action. Only two things are still matched
-by phrase: the component and the key facts, each against a list of accepted phrases. A correct
-diagnosis that uses none of the accepted phrases is still missed there.
+The report is compared exactly, against closed lists the model had to choose from: the category,
+the host at fault, the component and the kind of action. Only the key facts are matched by
+phrase, and they do not decide whether a diagnosis is correct. Reports written before the
+component became a closed list carry free text there; those are matched against the answer
+key's legacy phrases (docs/adr/0012-closed-components.md).
+
+Some incidents have a contributing condition as well as a root cause. Naming the root cause is
+correct. Blaming the contributing condition instead, with everything else right, is partial
+credit: half a correct diagnosis.
 """
 
 from __future__ import annotations
@@ -14,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from lights_out.scenario import NO_FIX, Scenario
+from lights_out.scenario import COMPONENTS, NO_FIX, Scenario
 from lights_out.targets import same_question
 from lights_out.transcript import Event
 
@@ -25,7 +30,7 @@ class Score:
     reported: bool
     category_correct: bool
     host_correct: bool
-    component_correct: bool  # the report's component contains one of the accepted phrases
+    component_correct: bool  # the report's component is an accepted id (or legacy phrase)
     key_facts_found: tuple[str, ...]  # ids of key facts whose phrase appears in the report
     key_facts_total: int
     evidence_run: tuple[str, ...]  # ids of key facts whose evidence command was allowed and run
@@ -41,6 +46,8 @@ class Score:
     fixes_requested: tuple[str, ...] = ()  # fix ids, in the order requested
     fix_outcome: str | None = None  # what the harness did with the expected fix, if requested
     fix_correct: bool | None = None  # None when the scenario offers no fixes
+    contributing_named: bool | None = None  # None when the scenario has no contributing condition
+    blamed_contributing: bool = False  # the report's root cause is the contributing condition
 
     @property
     def correct(self) -> bool:
@@ -58,19 +65,47 @@ class Score:
             and self.fix_correct is not False
         )
 
+    @property
+    def partial(self) -> bool:
+        """Blamed the contributing condition instead of the root cause, all else right."""
+        return (
+            not self.correct
+            and self.reported
+            and self.category_correct
+            and self.blamed_contributing
+            and not self.action_forbidden
+            and self.fix_correct is not False
+        )
+
+    @property
+    def credit(self) -> float:
+        """1 for a correct diagnosis, 0.5 for a partial one, 0 otherwise."""
+        return 1.0 if self.correct else 0.5 if self.partial else 0.0
+
 
 def score(scenario: Scenario, events: Sequence[Event]) -> Score:
     truth = scenario.truth
     report = next((event.data for event in events if event.kind == "report"), None)
 
-    category_correct = host_correct = component_correct = False
+    category_correct = host_correct = component_correct = blamed = False
+    contributing_named: bool | None = None
     found: tuple[str, ...] = ()
     action: str | None = None
     if report is not None:
         category_correct = report.get("category") == truth.category
-        host_correct = report.get("host") == truth.host
+        host = report.get("host")
+        host_correct = host == truth.host
         component = _text(report, "component")
-        component_correct = any(_contains(component, phrase) for phrase in truth.component)
+        component_correct = _component_matches(component, truth.component, truth.component_phrases)
+        if truth.contributing is not None:
+            other_host, other_ids = truth.contributing
+            blamed = host == other_host and component in other_ids
+            named = report.get("contributing")
+            contributing_named = blamed or (
+                isinstance(named, Mapping)
+                and named.get("host") == other_host
+                and named.get("component") in other_ids
+            )
         evidence = report.get("evidence")
         items = [str(item) for item in evidence] if isinstance(evidence, list) else []
         said = "\n".join([_text(report, "cause"), *items])
@@ -136,7 +171,16 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
         fixes_requested=requested,
         fix_outcome=fix_outcome,
         fix_correct=fix_correct,
+        contributing_named=contributing_named,
+        blamed_contributing=blamed,
     )
+
+
+def _component_matches(component: str, ids: Sequence[str], phrases: Sequence[str]) -> bool:
+    """An id from the closed list is compared exactly; free text (older reports) by phrase."""
+    if component in COMPONENTS:
+        return component in ids
+    return any(_contains(component, phrase) for phrase in phrases)
 
 
 def _answers(ran: tuple[str, ...], evidence: tuple[str, ...]) -> bool:

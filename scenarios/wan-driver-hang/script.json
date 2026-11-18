@@ -28,7 +28,7 @@
         "arguments": {
           "category": "hardware",
           "host": "gw.lan",
-          "component": "vtnet0 WAN network driver",
+          "component": "wan_nic_driver", "detail": "vtnet0 WAN network driver",
           "cause": "The firewall's WAN network driver (vtnet0) has hung: its transmit queue times out, so nothing can be sent to the provider even though the modem is registered and healthy.",
           "evidence": [
             "gw.lan: ping to the provider's gateway fails with sendto: No buffer space available",

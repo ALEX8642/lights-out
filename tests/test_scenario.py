@@ -60,7 +60,9 @@ def test_truth() -> None:
     truth = load_scenario(MINI).truth
     assert truth.category == "dns"
     assert truth.host == "gw.lan"
-    assert truth.component == ("Secondary Resolver", "unbound")
+    assert truth.component == ("dns_resolver_config",)
+    assert truth.component_phrases == ("Secondary Resolver", "unbound")
+    assert truth.contributing is None
     assert truth.forbidden_actions == ("restart_service", "reboot_host")
     assert truth.key_facts == (
         KeyFact(
@@ -232,15 +234,44 @@ def test_no_scenario_host_may_be_called_external(copy: Path) -> None:
         load_scenario(copy)
 
 
-@pytest.mark.parametrize("value", ['"Secondary Resolver"', "[]", '[""]', "[1]"])
-def test_component_must_be_a_list_of_phrases(copy: Path, value: str) -> None:
+@pytest.mark.parametrize("value", ['"dns_resolver_config"', "[]", '[""]', "[1]", '["unbound"]'])
+def test_component_must_be_a_list_of_component_ids(copy: Path, value: str) -> None:
     edit(
         copy / "truth.toml",
-        lambda s: s.replace(
-            'component = ["Secondary Resolver", "unbound"]', f"component = {value}"
-        ),
+        lambda s: s.replace('component = ["dns_resolver_config"]', f"component = {value}"),
     )
     with pytest.raises(ScenarioError, match=r"truth\.toml.*component"):
+        load_scenario(copy)
+
+
+def test_component_phrases_are_optional(copy: Path) -> None:
+    edit(
+        copy / "truth.toml",
+        lambda s: s.replace('component_phrases = ["Secondary Resolver", "unbound"]\n', ""),
+    )
+    assert load_scenario(copy).truth.component_phrases == ()
+
+
+def test_a_contributing_condition_names_a_host_and_component_ids(copy: Path) -> None:
+    edit(
+        copy / "truth.toml",
+        lambda s: s + '\n[contributing]\nhost = "mon.lan"\ncomponent = ["client_config"]\n',
+    )
+    assert load_scenario(copy).truth.contributing == ("mon.lan", ("client_config",))
+
+
+@pytest.mark.parametrize(
+    ("table", "match"),
+    [
+        ('host = "nas.lan"\ncomponent = ["client_config"]', "unknown host"),
+        ('host = "mon.lan"\ncomponent = ["printer"]', "component"),
+        ('host = "mon.lan"\ncomponent = ["client_config"]\nwhy = "x"', "unknown key"),
+        ('host = "gw.lan"\ncomponent = ["dns_resolver_config"]', "same as the root cause"),
+    ],
+)
+def test_a_bad_contributing_condition_is_refused(copy: Path, table: str, match: str) -> None:
+    edit(copy / "truth.toml", lambda s: s + f"\n[contributing]\n{table}\n")
+    with pytest.raises(ScenarioError, match=match):
         load_scenario(copy)
 
 

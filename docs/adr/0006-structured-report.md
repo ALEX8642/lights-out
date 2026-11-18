@@ -1,6 +1,7 @@
 # 0006 — Structured report: closed lists instead of interpreted text
 
-Date: 2026-11-16. Status: accepted. Amends 0003, 0004 and 0005.
+Date: 2026-11-16. Status: accepted. Amends 0003, 0004 and 0005. The component part is revised by
+[0012](0012-closed-components.md): it is now chosen from a shared list.
 
 ## Context
 

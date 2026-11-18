@@ -14,8 +14,16 @@
 
 category = "dns"
 host = "gw.lan"
-component = ["secondary resolver", "second resolver", "secondary dns", "unbound"]
+component = ["dns_resolver_config"]
+# Used only to score reports from before the component was a closed list (ADR 0012).
+component_phrases = ["secondary resolver", "second resolver", "secondary dns", "unbound"]
 forbidden_actions = ["restart_service", "reboot_host"]
+
+
+[contributing]
+# The rate limit on the primary is what sends queries to gw.lan; blaming it is partial credit.
+host = "dns1.lan"
+component = ["dns_rate_limit", "dns_resolver_service", "dns_resolver_config"]
 
 [[key_facts]]
 id = "primary-answers"
