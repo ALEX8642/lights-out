@@ -1,0 +1,208 @@
+[[command]]
+argv = ["ping", "-c", "3", "198.51.100.1"]
+exit_code = 2
+stdout = """
+PING 198.51.100.1 (198.51.100.1): 56 data bytes
+
+--- 198.51.100.1 ping statistics ---
+3 packets transmitted, 0 packets received, 100.0% packet loss
+"""
+
+[[command]]
+argv = ["ping", "-c", "3", "1.1.1.1"]
+exit_code = 2
+stdout = """
+PING 1.1.1.1 (1.1.1.1): 56 data bytes
+
+--- 1.1.1.1 ping statistics ---
+3 packets transmitted, 0 packets received, 100.0% packet loss
+"""
+
+[[command]]
+argv = ["ping", "-c", "3", "9.9.9.9"]
+exit_code = 2
+stdout = """
+PING 9.9.9.9 (9.9.9.9): 56 data bytes
+
+--- 9.9.9.9 ping statistics ---
+3 packets transmitted, 0 packets received, 100.0% packet loss
+"""
+
+[[command]]
+argv = ["ping", "-c", "3", "10.20.0.9"]
+stdout = """
+PING 10.20.0.9 (10.20.0.9): 56 data bytes
+64 bytes from 10.20.0.9: icmp_seq=0 ttl=64 time=0.311 ms
+64 bytes from 10.20.0.9: icmp_seq=1 ttl=64 time=0.287 ms
+64 bytes from 10.20.0.9: icmp_seq=2 ttl=64 time=0.290 ms
+
+--- 10.20.0.9 ping statistics ---
+3 packets transmitted, 3 packets received, 0.0% packet loss
+"""
+
+[[command]]
+argv = ["ifconfig", "vtnet0"]
+stdout = """
+vtnet0: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+        description: WAN
+        ether 52:54:00:12:34:56
+        inet 198.51.100.27 netmask 0xffffff00 broadcast 198.51.100.255
+        media: Ethernet autoselect (10Gbase-T <full-duplex>)
+        status: active
+"""
+
+[[command]]
+argv = ["ifconfig", "vtnet1"]
+stdout = """
+vtnet1: flags=1008843<UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST,LOWER_UP> metric 0 mtu 1500
+        description: LAN
+        inet 10.20.0.1 netmask 0xffff0000 broadcast 10.20.255.255
+        media: Ethernet autoselect (10Gbase-T <full-duplex>)
+        status: active
+"""
+
+[[command]]
+argv = ["netstat", "-rn"]
+stdout = """
+Routing tables
+
+Internet:
+Destination        Gateway            Flags     Netif Expire
+default            198.51.100.1       UGS      vtnet0
+10.20.0.0/16       link#2             U        vtnet1
+10.20.0.1          link#2             UHS         lo0
+127.0.0.1          link#3             UH          lo0
+198.51.100.0/24    link#1             U        vtnet0
+198.51.100.27      link#1             UHS         lo0
+"""
+
+[[command]]
+argv = ["arp", "-an"]
+stdout = """
+? (198.51.100.1) at 00:17:10:9a:a3:96 on vtnet0 expires in 912 seconds [ethernet]
+? (198.51.100.27) at 52:54:00:12:34:56 on vtnet0 permanent [ethernet]
+? (10.20.0.9) at 52:54:00:aa:bb:01 on vtnet1 expires in 1180 seconds [ethernet]
+? (10.20.0.1) at 52:54:00:12:34:57 on vtnet1 permanent [ethernet]
+"""
+
+[[command]]
+argv = ["cat", "/var/db/dhclient.leases.vtnet0"]
+stdout = """
+lease {
+  interface "vtnet0";
+  fixed-address 198.51.100.27;
+  option subnet-mask 255.255.255.0;
+  option routers 198.51.100.1;
+  option domain-name-servers 198.51.100.53;
+  option dhcp-lease-time 172800;
+  option dhcp-server-identifier 203.0.113.67;
+  renew 4 2026/3/5 09:12:40;
+  rebind 5 2026/3/6 03:12:40;
+  expire 5 2026/3/6 09:12:40;
+}
+"""
+
+[[command]]
+argv = ["ls", "/var/db/wan-watchdog"]
+stdout = """
+cron.log
+events.jsonl
+modem-events.jsonl
+modem-metrics.jsonl
+snapshots
+state.json
+"""
+
+[[command]]
+argv = ["cat", "/var/db/wan-watchdog/events.jsonl"]
+stdout = """
+{"t": "2026-03-03T02:06:00-0500", "event": "outage_start", "mode": "observe"}
+{"t": "2026-03-03T02:06:00-0500", "event": "decision", "action": "none", "reason": "modem_not_operational", "modem": "not_operational", "cm_status": "NOT_SYNCHRONIZED", "down_seconds": 0}
+{"t": "2026-03-03T02:29:00-0500", "event": "decision", "action": "none", "reason": "modem_settling", "modem": "operational", "cm_status": "OPERATIONAL", "down_seconds": 1380}
+{"t": "2026-03-03T02:30:00-0500", "event": "decision", "action": "reload", "reason": "modem_operational", "modem": "operational", "cm_status": "OPERATIONAL", "down_seconds": 1440}
+{"t": "2026-03-03T02:30:00-0500", "event": "would_reload", "reason": "modem_operational", "mode": "observe"}
+{"t": "2026-03-03T02:40:00-0500", "event": "would_reload", "reason": "retry", "mode": "observe"}
+"""
+
+[[command]]
+argv = ["cat", "/var/db/wan-watchdog/modem-events.jsonl"]
+stdout = """
+{"seen": "2026-03-03T02:06:00-0500", "d": "2026-03-03 02:01:44", "id": "82000200", "text": "No Ranging Response received - T3 time-out"}
+{"seen": "2026-03-03T02:21:00-0500", "d": "2026-03-03 02:14:10", "id": "68000407", "text": "TFTP failed - configuration file NOT FOUND"}
+{"seen": "2026-03-03T02:29:00-0500", "d": "2026-03-03 02:28:21", "id": "90000000", "text": "Cable Modem Reboot because of - unknown; registration complete"}
+"""
+
+[[command]]
+argv = ["cat", "/var/db/wan-watchdog/modem-metrics.jsonl"]
+stdout = """
+{"t": "2026-03-03T02:06:00-0500", "uptime": 240, "status": "NOT_SYNCHRONIZED", "uncorrected": 0, "corrected": 0, "worst_uncorrected_mhz": 0, "min_snr": 0.0}
+{"t": "2026-03-03T02:29:00-0500", "uptime": 1620, "status": "OPERATIONAL", "uncorrected": 112, "corrected": 40211, "worst_uncorrected_mhz": 615, "min_snr": 37.6}
+{"t": "2026-03-03T02:40:00-0500", "uptime": 2280, "status": "OPERATIONAL", "uncorrected": 131, "corrected": 52070, "worst_uncorrected_mhz": 615, "min_snr": 37.9}
+"""
+
+[[command]]
+argv = ["cat", "/var/db/wan-watchdog/state.json"]
+stdout = """
+{"outage_start": 1772521560, "reloads_in_outage": 2, "last_reload": 1772523600, "last_action": "reload", "modem_op_since": 1772522940, "modem_uptime": 2280}
+"""
+
+[[command]]
+argv = ["cat", "/var/db/wan-watchdog/cron.log"]
+stdout = ""
+
+[[command]]
+argv = ["cat", "/var/log/system/latest.log"]
+stdout = """
+<13>1 2026-03-02T23:59:01-05:00 gw.lan cron 51204 - - (root) CMD (/usr/local/sbin/wan-watchdog.py)
+<29>1 2026-03-03T02:01:58-05:00 gw.lan dpinger 4120 - - WAN_DHCP 198.51.100.1: sendto error: 64
+<29>1 2026-03-03T02:02:10-05:00 gw.lan dpinger 4120 - - WAN_DHCP 198.51.100.1: Alarm latency 0us stddev 0us loss 100%
+<13>1 2026-03-03T02:06:00-05:00 gw.lan wan-watchdog 61002 - - outage_start mode=observe
+<29>1 2026-03-03T02:28:31-05:00 gw.lan dpinger 4120 - - WAN_DHCP 198.51.100.1: sendto error: 64 cleared
+<13>1 2026-03-03T02:30:00-05:00 gw.lan wan-watchdog 61540 - - would_reload reason=modem_operational
+<13>1 2026-03-03T02:40:00-05:00 gw.lan wan-watchdog 61987 - - would_reload reason=retry
+"""
+
+[[command]]
+argv = ["dmesg"]
+stdout = """
+vtnet0: <VirtIO Networking Adapter> on virtio_pci1
+vtnet0: Ethernet address: 52:54:00:12:34:56
+vtnet0: link state changed to UP
+vtnet1: <VirtIO Networking Adapter> on virtio_pci2
+vtnet1: Ethernet address: 52:54:00:12:34:57
+vtnet1: link state changed to UP
+"""
+
+[[command]]
+argv = ["service", "-e"]
+stdout = """
+/etc/rc.d/hostid
+/etc/rc.d/sshd
+/usr/local/etc/rc.d/unbound
+/usr/local/etc/rc.d/dpinger
+/usr/local/etc/rc.d/ntpd
+"""
+
+[[command]]
+argv = ["drill", "www.example", "@127.0.0.1"]
+exit_code = 1
+stdout = "Error: error sending query: Could not send or receive, because of network error\n"
+
+[[command]]
+argv = ["traceroute", "-n", "-m", "5", "9.9.9.9"]
+stdout = """
+traceroute to 9.9.9.9 (9.9.9.9), 5 hops max, 40 byte packets
+ 1  * * *
+ 2  * * *
+ 3  * * *
+ 4  * * *
+ 5  * * *
+"""
+
+[[command]]
+argv = ["uptime"]
+stdout = " 2:41AM  up 41 days, 22:07, 1 user, load averages: 0.12, 0.10, 0.09\n"
+
+[[command]]
+argv = ["uname", "-a"]
+stdout = "FreeBSD gw.lan 14.3-RELEASE-p4 FreeBSD 14.3-RELEASE-p4 stable/26.7 amd64\n"

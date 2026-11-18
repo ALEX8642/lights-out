@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal, cast, get_args
 
 EventKind = Literal[
-    "start", "proposal", "decision", "output", "tool_error", "usage", "report", "end"
+    "start", "proposal", "decision", "output", "tool_error", "usage", "report", "fix", "end"
 ]
 _KINDS = frozenset(get_args(EventKind))
 
