@@ -286,6 +286,7 @@ def test_every_default_program_has_a_usage_line() -> None:
         ("firewall", "pfctl -s states -v"),
         ("firewall", "pfctl -t crowdsec_blocklists -T show"),
         ("firewall", "netstat -rn"),
+        ("firewall", "netstat -m"),
         ("firewall", "sockstat -4 -l"),
         ("firewall", "drill nas.lan @127.0.0.1"),
         ("firewall", "cat /var/unbound/unbound.conf"),

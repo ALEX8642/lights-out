@@ -3,7 +3,7 @@ from pathlib import Path
 
 from lights_out.agent import ModelTurn, ScriptedModel, ToolCall, run_drill
 from lights_out.policy import Policy
-from lights_out.scenario import Fix, FixState, Scenario, load_scenario
+from lights_out.scenario import Fix, FixState, KeyFact, Scenario, load_scenario
 from lights_out.scoring import Score, score
 from lights_out.targets import ReplayTarget
 from lights_out.transcript import Event, Transcript, read_transcript
@@ -384,3 +384,18 @@ def test_a_harmless_extra_fix_request_is_allowed() -> None:
         report(1),
     ]
     assert score(scenario, events).fix_correct is True
+
+
+def test_reading_the_evidence_file_another_way_counts() -> None:
+    truth = dataclasses.replace(
+        MINI.truth,
+        key_facts=(
+            KeyFact("conf", ("private-domain",), ("gw.lan", "cat /var/unbound/unbound.conf")),
+        ),
+    )
+    scenario = dataclasses.replace(MINI, truth=truth)
+    for command in ("tail -n 60 /var/unbound/unbound.conf", "head /var/unbound/unbound.conf"):
+        events = [usage(1), *ran(1, "gw.lan", command), report(1)]
+        assert score(scenario, events).evidence_run == ("conf",), command
+    other = [usage(1), *ran(1, "gw.lan", "tail -n 60 /etc/hosts"), report(1)]
+    assert score(scenario, other).evidence_run == ()

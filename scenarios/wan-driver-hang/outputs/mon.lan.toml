@@ -1,0 +1,64 @@
+[[command]]
+argv = ["ping", "-c", "3", "1.1.1.1"]
+exit_code = 1
+stdout = """
+PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+
+--- 1.1.1.1 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2047ms
+"""
+
+[[command]]
+argv = ["ping", "-c", "3", "10.20.0.1"]
+stdout = """
+PING 10.20.0.1 (10.20.0.1) 56(84) bytes of data.
+64 bytes from 10.20.0.1: icmp_seq=1 ttl=64 time=0.402 ms
+64 bytes from 10.20.0.1: icmp_seq=2 ttl=64 time=0.377 ms
+64 bytes from 10.20.0.1: icmp_seq=3 ttl=64 time=0.381 ms
+
+--- 10.20.0.1 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2003ms
+"""
+
+[[command]]
+argv = ["ip", "route"]
+stdout = """
+default via 10.20.0.1 dev eth0 proto dhcp src 10.20.0.9 metric 100
+10.20.0.0/16 dev eth0 proto kernel scope link src 10.20.0.9
+"""
+
+[[command]]
+argv = ["cat", "/etc/resolv.conf"]
+stdout = """
+search lan
+nameserver 10.20.0.1
+"""
+
+[[command]]
+argv = ["traceroute", "-n", "-m", "5", "1.1.1.1"]
+stdout = """
+traceroute to 1.1.1.1 (1.1.1.1), 5 hops max, 60 byte packets
+ 1  10.20.0.1  0.390 ms  0.371 ms  0.362 ms
+ 2  * * *
+ 3  * * *
+ 4  * * *
+ 5  * * *
+"""
+
+[[command]]
+argv = ["systemctl", "list-units", "--type", "service"]
+stdout = """
+  UNIT                      LOAD   ACTIVE SUB     DESCRIPTION
+  cron.service              loaded active running Regular background program processing daemon
+  monitor.service           loaded active running Uptime monitor
+  ssh.service               loaded active running OpenBSD Secure Shell server
+"""
+
+[[command]]
+argv = ["journalctl", "--no-pager", "-n", "50", "-u", "monitor.service"]
+stdout = """
+Mar 03 02:03:16 mon monitor[812]: [internet] DOWN: PING 1.1.1.1: 100% packet loss
+Mar 03 02:03:51 mon monitor[812]: [dns-internet] DOWN: queryA ESERVFAIL example.com
+Mar 03 02:05:44 mon monitor[812]: [router] UP (0.4 ms)
+Mar 03 03:30:16 mon monitor[812]: [internet] still DOWN after 87 min
+"""

@@ -6,6 +6,15 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added (since the fix tool)
+
+- Scenario `wan-driver-hang`: the firewall's WAN driver has hung, the watchdog's reloads are
+  exhausted and the maintainer is away; the right fix is a firewall reboot, acting once without
+  an answer, and rebooting the modem is the trap (#34).
+- Replay: `dmesg -a`, `arp -a`/`-n` and `netstat -f inet` are equivalent to their recorded forms.
+  Scoring counts `head` or `tail` of an evidence file as reading it. `netstat -m` is allowed on
+  the firewall (#34).
+
 ### Added
 
 - Fix tool in drills: scenarios offer scripted fixes with a risk class, preconditions and
