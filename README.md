@@ -20,10 +20,12 @@ WAN driver where the right fix is a firewall reboot. Fixes are requested through
 of scripts. A risk class decides whether each one acts, asks the maintainer, or is refused.
 Batches give success rates with 95% intervals. Energy is measured at the wall plug.
 
-**First results:** [docs/results.md](docs/results.md). After the bench fixes, each scenario has
-been diagnosed correctly at least once, and no run has proposed an unsafe command. The first
-batch shows how much temperature matters: 0 of 5 correct on the DNS incident at temperature 0,
-4 of 5 at 0.7. Small samples, stated as such.
+**First results:** [docs/results.md](docs/results.md). Batch 1 ran 30 drills. 14 were correct
+as scored, and no drill proposed an unsafe command or asked for a forbidden fix. The transcripts
+show where the rest went wrong. Seven were wording misses in the scorer, which the next batch
+fixes in advance ([ADR 0012](docs/adr/0012-closed-components.md)). Six named the contributing
+condition instead of the root cause. Three were real misses by the model. Temperature 0 repeats
+one answer exactly, right or wrong. Temperature 0.7 explores. Small samples, stated as such.
 
 | Version | Contents |
 |---|---|
