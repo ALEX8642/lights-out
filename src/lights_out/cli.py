@@ -6,6 +6,7 @@ Exit codes: 0 for yes (allowed, reported, correct), 1 for no, 2 for a usage or i
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
 import json
 import os
@@ -17,6 +18,7 @@ from lights_out import __version__
 from lights_out.agent import ModelClient, ScriptedModel, run_drill
 from lights_out.batch import GroupSummary, ModelFactory, RunRecord, run_batch, summarise
 from lights_out.endpoint import OpenAIClient
+from lights_out.energy import CsvSource, DrillEnergy, HomeAssistantSource, PowerSource, price_batch
 from lights_out.policy import Allow, Policy, PolicyError
 from lights_out.scenario import ScenarioError, load_scenario
 from lights_out.scoring import Score, score
@@ -87,6 +89,17 @@ def _parser() -> argparse.ArgumentParser:
     )
     batch.add_argument("--max-steps", type=int, default=20, help="model turns allowed per drill")
     batch.set_defaults(handler=_batch)
+
+    energy = commands.add_parser("energy", help="price a batch's drills from wall-plug power")
+    energy.add_argument("batch_dir", type=Path, metavar="BATCH_DIR", help="a batch --out directory")
+    energy.add_argument("--csv", type=Path, help="power readings: CSV with time,watts columns")
+    energy.add_argument("--ha-url", help="Home Assistant base URL")
+    energy.add_argument("--entity", help="Home Assistant power sensor entity id")
+    energy.add_argument("--token-env", metavar="VAR", help="variable holding the HA token")
+    energy.add_argument(
+        "--idle-watts", type=float, required=True, help="baseline measured in a quiet window"
+    )
+    energy.set_defaults(handler=_energy)
 
     score_parser = commands.add_parser("score", help="score a transcript against a scenario")
     score_parser.add_argument("scenario", type=Path, help="scenario directory")
@@ -218,6 +231,53 @@ def _batch_table(groups: list[GroupSummary]) -> str:
             f"{g.mean_steps:>6.1f} {g.mean_wall_seconds:>8.0f} {g.mean_tokens:>8.0f}"
         )
     return "\n".join(lines)
+
+
+def _energy(args: argparse.Namespace) -> int:
+    if (args.csv is None) == (args.ha_url is None):
+        print("lights-out: give exactly one of --csv or --ha-url", file=sys.stderr)
+        return 2
+    source: PowerSource
+    if args.csv is not None:
+        source = CsvSource(args.csv)
+    else:
+        if not args.entity or not args.token_env:
+            print("lights-out: --ha-url needs --entity and --token-env", file=sys.stderr)
+            return 2
+        token = os.environ.get(args.token_env)
+        if not token:
+            print(f"lights-out: {args.token_env} is not set", file=sys.stderr)
+            return 2
+        source = HomeAssistantSource(args.ha_url, args.entity, token)
+    priced = price_batch(args.batch_dir / "summary.jsonl", source, args.idle_watts)
+    with (args.batch_dir / "energy.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow([f.name for f in dataclasses.fields(DrillEnergy)])
+        for row in priced:
+            writer.writerow(dataclasses.astuple(row))
+    groups: dict[tuple[str, float], list[DrillEnergy]] = {}
+    for row in priced:
+        groups.setdefault((row.scenario, row.temperature), []).append(row)
+    print(
+        f"{'scenario':<22} {'temp':>4} {'correct':>8} {'Wh/drill':>9} {'above idle':>11} "
+        f"{'Wh/correct':>11}"
+    )
+    for (scenario, temperature), rows in groups.items():
+        known = [r for r in rows if r.wh is not None]
+        total = sum(r.wh or 0.0 for r in known)
+        above = sum(r.wh_above_idle or 0.0 for r in known)
+        correct = sum(r.correct for r in rows)
+        per_correct = f"{total / correct:.2f}" if correct else "-"
+        mean = total / len(known) if known else float("nan")
+        mean_above = above / len(known) if known else float("nan")
+        print(
+            f"{scenario:<22} {temperature:>4g} {f'{correct}/{len(rows)}':>8} {mean:>9.2f} "
+            f"{mean_above:>11.2f} {per_correct:>11}"
+        )
+    print(
+        f"\nidle baseline {args.idle_watts:g} W; per-drill rows in {args.batch_dir / 'energy.csv'}"
+    )
+    return 0
 
 
 def _score(args: argparse.Namespace) -> int:
