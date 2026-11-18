@@ -17,6 +17,7 @@ from lights_out import __version__
 from lights_out.agent import ModelClient, ScriptedModel, run_drill
 from lights_out.endpoint import OpenAIClient
 from lights_out.policy import Allow, Policy, PolicyError
+from lights_out.review import collect_refusals
 from lights_out.scenario import ScenarioError, load_scenario
 from lights_out.scoring import Score, score
 from lights_out.targets import ReplayTarget
@@ -67,6 +68,13 @@ def _parser() -> argparse.ArgumentParser:
     drill.add_argument("--out", type=Path, required=True, help="transcript file to write")
     drill.add_argument("--max-steps", type=int, default=20, help="model turns allowed (default 20)")
     drill.set_defaults(handler=_drill)
+
+    refusals = commands.add_parser("refusals", help="group refused commands for review")
+    refusals.add_argument("dirs", type=Path, nargs="+", metavar="DIR", help="transcript dirs")
+    refusals.add_argument(
+        "--scenarios", type=Path, default=Path("scenarios"), help="where scenario dirs live"
+    )
+    refusals.set_defaults(handler=_refusals)
 
     score_parser = commands.add_parser("score", help="score a transcript against a scenario")
     score_parser.add_argument("scenario", type=Path, help="scenario directory")
@@ -125,6 +133,16 @@ def _drill(args: argparse.Namespace) -> int:
     )
     print(f"transcript: {args.out}")
     return 0 if result.stop_reason == "report" else 1
+
+
+def _refusals(args: argparse.Namespace) -> int:
+    groups = collect_refusals(args.dirs, args.scenarios)
+    print(f"{'kind':<9} {'role':<9} {'program':<12} {'count':>5} {'drills':>6}  reason / examples")
+    for g in groups:
+        print(f"{g.kind:<9} {g.role:<9} {g.program:<12} {g.count:>5} {g.drills:>6}  {g.reason}")
+        for example in g.examples:
+            print(f"{'':<46}  {example}")
+    return 0
 
 
 def _score(args: argparse.Namespace) -> int:

@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added (review loop)
+
+- `lights-out refusals DIR...`: groups every refused command across transcripts by kind, host
+  role, program and reason, with counts and examples, for review; README section "How the lists
+  grow" (#40).
+
 ### Added
 
 - Fix tool in drills: scenarios offer scripted fixes with a risk class, preconditions and
