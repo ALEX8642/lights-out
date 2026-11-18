@@ -11,6 +11,10 @@ All notable changes to this project are recorded here. The format follows
 - `lights-out refusals DIR...`: groups every refused command across transcripts by kind, host
   role, program and reason, with counts and examples, for review; README section "How the lists
   grow" (#40).
+### Design (runbooks)
+
+- Decision record 0011: deterministic runbooks first (check, fix, verify, escalate), the model
+  second; the WAN watchdog is the first runbook.
 
 ### Added
 
