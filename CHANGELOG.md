@@ -6,6 +6,11 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Design (runbooks)
+
+- Decision record 0011: deterministic runbooks first (check, fix, verify, escalate), the model
+  second; the WAN watchdog is the first runbook.
+
 ### Added
 
 - Fix tool in drills: scenarios offer scripted fixes with a risk class, preconditions and
