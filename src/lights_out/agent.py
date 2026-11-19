@@ -126,7 +126,9 @@ TOOLS: tuple[Mapping[str, object], ...] = (
                     "component": {
                         "type": "string",
                         "enum": sorted(COMPONENTS),
-                        "description": "The part at fault on that host.",
+                        "description": (
+                            "The part at fault on that host, as described in the instructions."
+                        ),
                     },
                     "detail": {
                         "type": "string",
@@ -341,7 +343,9 @@ def system_prompt(scenario: Scenario, policy: Policy) -> str:
         "exercise and say so; that is not evidence about the network.\n\n"
         "Look at the evidence before you conclude. When you know the cause, or have learned "
         "all you can, call the report tool once. State only what the output you saw supports, "
-        "and recommend the smallest action that would fix the cause."
+        "and recommend the smallest action that would fix the cause.\n\n"
+        "The report's component is one of these:\n"
+        + "\n".join(f"- {name}: {text}" for name, text in sorted(COMPONENTS.items()))
     )
 
 

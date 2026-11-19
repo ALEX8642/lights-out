@@ -740,3 +740,15 @@ def test_a_report_without_a_valid_fix_is_a_tool_error(
     assert drill.result.tool_errors == 1
     assert error in drill.tool_replies()[0]
     assert drill.of("fix") == [] and len(drill.of("report")) == 1
+
+
+def test_the_prompt_describes_every_component() -> None:
+    prompt = system_prompt(MINI, POLICY)
+    for component, description in COMPONENTS.items():
+        assert description.strip(), component
+        assert f"- {component}: {description}" in prompt
+
+
+def test_the_report_tool_points_to_the_component_descriptions() -> None:
+    schema = TOOLS[1]["function"]["parameters"]["properties"]  # type: ignore[index]
+    assert "described in the instructions" in schema["component"]["description"]

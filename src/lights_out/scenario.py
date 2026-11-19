@@ -16,6 +16,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 # Where the fault lies. Kinds of cause ("misconfiguration") are deliberately not categories:
 # they overlap with every area, and the kind of fix is captured by the report's action instead.
@@ -38,32 +39,48 @@ ACTIONS = frozenset(
 # The parts a fault can be in. A closed list, so the report's component is a choice compared
 # exactly, like the host and the action (docs/adr/0012-closed-components.md). Deliberately
 # generic and shared by every scenario: a list made per scenario would hint at the answer.
-COMPONENTS = frozenset(
+# Each id comes with the description the model is shown, so that choosing between neighbours
+# (a resolver's configuration or "another service's") does not depend on guessing from the name.
+COMPONENTS: Mapping[str, str] = MappingProxyType(
     {
-        "modem",  # the provider's modem or ONT
-        "provider_network",  # beyond the modem: the ISP
-        "wan_link",  # cable, port or link negotiation on the firewall's WAN side
-        "wan_dhcp_lease",  # the firewall's WAN address lease from the provider
-        "wan_nic_driver",  # the firewall's WAN network interface or its driver
-        "firewall_rules",
-        "nat",
-        "routing_table",
-        "vpn",
-        "dhcp_server",  # addresses handed out on the local network
-        "dns_resolver_config",
-        "dns_resolver_service",  # the resolver process itself: crashed, hung, overloaded
-        "dns_rate_limit",
-        "dns_records",  # the zone data: a wrong or missing record
-        "time_sync",
-        "certificate",
-        "disk",
-        "memory",
-        "power",
-        "service_config",  # another service's configuration
-        "service_process",  # another service's process: crashed, hung, not started
-        "monitoring_config",  # the monitor itself is wrong
-        "client_config",  # the client's own settings
-        "other",
+        "modem": "the provider's modem or ONT: its sync, registration or own reboots",
+        "provider_network": "beyond the modem: the provider's network",
+        "wan_link": (
+            "the physical link on the firewall's WAN side: cable, port or link negotiation, "
+            "not addressing"
+        ),
+        "wan_dhcp_lease": (
+            "the firewall's WAN address lease from the provider: stale, lost or not renewed"
+        ),
+        "wan_nic_driver": (
+            "the firewall's WAN network interface or its driver: hung, queue timeouts, errors"
+        ),
+        "firewall_rules": "packet filter rules that block or pass traffic",
+        "nat": "address translation and port forwards",
+        "routing_table": "routes and gateways",
+        "vpn": "VPN tunnels",
+        "dhcp_server": "the DHCP service that hands out addresses on the local network",
+        "dns_resolver_config": (
+            "the configuration of a DNS resolver or DNS server: forwarding, filtering, "
+            "private domains, access"
+        ),
+        "dns_resolver_service": (
+            "a DNS resolver or server process itself: crashed, hung or overloaded"
+        ),
+        "dns_rate_limit": "a DNS server's rate limiting of queries",
+        "dns_records": "zone data: a wrong or missing DNS record",
+        "time_sync": "clock and time synchronisation",
+        "certificate": "a TLS certificate: expired, wrong name, untrusted",
+        "disk": "storage: full, failing or read-only",
+        "memory": "memory exhaustion",
+        "power": "power supply or power loss",
+        "service_config": (
+            "the configuration of a service that is not DNS, DHCP, routing or the firewall"
+        ),
+        "service_process": ("a process of such a service: crashed, hung or not started"),
+        "monitoring_config": "the monitoring itself is wrong: a check, threshold or target",
+        "client_config": "the client's own settings",
+        "other": "none of the above",
     }
 )
 
