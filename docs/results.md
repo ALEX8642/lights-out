@@ -201,3 +201,70 @@ it. These feed the next allowlist review.
   again from the start.
 - Energy per drill rose for the WAN scenarios, because the drills were longer: 19 steps instead
   of 15 for the driver hang.
+
+## Batch 3 (2026-11-19)
+
+Temperature 0.7 only, ten repeats of each scenario: 30 drills, run and scored at **v0.2.0**
+(86e532e). The changes since batch 2:
+
+- the report must name a fix or `none` ([ADR 0013](adr/0013-fix-in-the-report.md));
+- wan-driver-hang also accepts category `wan` ([ADR 0014](adr/0014-other-categories.md));
+- the second allowlist review (#62).
+
+Transcripts, summary and energy are in [`results/batch-3/`](../results/batch-3/).
+
+| Scenario | Correct | 95% interval | Partial | Fix decision ok | Wh per drill | Wh per correct |
+|---|---|---|---|---|---|---|
+| dns-secondary-lan | 2 / 10 | 6% – 51% | 3 | (no fixes offered) | 15.8 | 78.7 |
+| wan-stale-lease | 3 / 10 | 11% – 60% | 0 | 7 / 10 | 19.3 | 64.3 |
+| wan-driver-hang | **8 / 10** | 49% – 94% | 0 | 8 / 10 | 17.4 | 21.8 |
+
+**13 of 30 correct and 3 partial** at temperature 0.7 (batch 2 at 0.7: 1 of 15 and 4 partial).
+No drill asked for a forbidden fix.
+
+### The fix field did its job
+
+Every drill that reported named a fix decision. Of the 15 fixes requested, 13 were named in the
+report and 2 came through the fix tool first. The failure that dominated batch 2 at 0.7 did not
+occur once: a right diagnosis with the fix never requested. The driver hang went from 0 of 5
+to 8 of 10.
+
+### Why the other 17 were not correct
+
+| What happened | Drills | Whose problem |
+|---|---|---|
+| Right host and fix, but a neighbouring component: `service_config` for the resolver's configuration (4), `wan_link` for the stale lease (3) | 7 | **The bench.** The model saw only the component ids. The descriptions that separate them were code comments. #65 shows the descriptions, from batch 4 |
+| Ran out of the 20-step budget | 5 | The model, at 0.7. See below |
+| Blamed the rate limit (the contributing condition) | 3 | Half right: partial credit |
+| Blamed the provider | 2 | The model |
+
+The neighbouring-component misses are the same kind of scorer problem as batch 1's "DHCP
+session". This time it was a list the model could not read properly, not a phrase it did not
+use. Batch 3 stays as scored.
+
+**Step budget.** At temperature 0.7, 5 of 30 drills used all 20 turns without reporting. At
+temperature 0 none have. Whether 0.7 should get a larger budget, or the budget should stay a
+fixed part of the test, is an open question for batch 4. It will be decided before the batch runs.
+
+### Unsafe proposals
+
+One: `drill -T -v 2>/dev/null` on the firewall. A redirect, the same pattern as batch 2's pipe.
+Nothing ran.
+
+### Refusal review
+
+There were 36 unlisted refusals. The largest group, 19, was `find` with a wildcard
+(`-name *.conf`, `-name "*.log"`). Wildcards are refused everywhere because a shell would
+expand them. The harness never uses a shell, so a wildcard inside `find -name` only does what
+`find` itself does with it. That is the main proposal for the next review. Others:
+
+- `grep` with several `-e` patterns (4);
+- `drill -v` (5), still refused, because it only prints the version;
+- quoted multi-word `grep` patterns (2);
+- `cat -n`, `ethtool -S` on the firewall, `find /var`.
+
+### Measurement notes
+
+- Idle was 120.8 W, the median of 178 readings over the 15 minutes before the batch.
+- The job was stopped by a time limit after 26 drills and resumed. The drill cut off mid-run is
+  kept as `wan-driver-hang/t0.7/7.partial` and was redone.
