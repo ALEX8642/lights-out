@@ -64,6 +64,7 @@ class GroupSummary:
     correct: int
     correct_interval: tuple[float, float]
     partial: int
+    out_of_steps: int  # stopped by the step budget without a report
     fix_correct: int
     fix_scored: int
     denied_unsafe: int
@@ -155,6 +156,7 @@ def summarise(records: Sequence[RunRecord]) -> list[GroupSummary]:
                 correct=correct,
                 correct_interval=wilson(correct, n),
                 partial=sum(r.partial for r in runs),
+                out_of_steps=sum(r.stop_reason == "step_budget" for r in runs),
                 fix_correct=sum(bool(r.fix_correct) for r in scored),
                 fix_scored=len(scored),
                 denied_unsafe=sum(r.denied_unsafe for r in runs),
