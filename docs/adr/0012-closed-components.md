@@ -56,3 +56,13 @@ answer.
   that the list needs a new entry.
 - Key facts are still matched by phrase. They measure how well a diagnosis is supported, not
   whether it is correct, so their brittleness does not decide a result.
+
+## Amendment (2026-11-18): the model sees what each component means
+
+In batch 3 the model was shown only the ids. In seven drills it named the right host and chose
+a neighbouring id: `service_config` for the resolver's configuration (4 times) and `wan_link`
+for the stale lease (3 times). The descriptions that tell them apart, "another service's
+configuration" and "cable, port or link negotiation", were code comments it never saw.
+`COMPONENTS` now maps each id to a one-line description. The system prompt lists them all, and
+the report tool points to that list. The list is the same for every scenario, so this changes
+nothing about what a scenario reveals. It applies from batch 4. Batch 3 stays as scored.
