@@ -141,3 +141,26 @@ def test_a_summary_line_from_before_partial_credit_still_loads(tmp_path: Path) -
     again = Counting()
     (record,) = run_batch(SCENARIOS[:1], POLICY, again, tmp_path, repeats=1, temperatures=(0.0,))
     assert again.started == 0 and record.partial is False
+
+
+def test_drills_that_ran_out_of_steps_are_counted() -> None:
+    def rec(stop: str) -> RunRecord:
+        return RunRecord(
+            scenario="a", temperature=0.7, repeat=1, transcript="t", correct=False,
+            fix_correct=None, stop_reason=stop, steps=20, prompt_tokens=0,
+            completion_tokens=0, denied_unsafe=0, denied_unlisted=0, tool_errors=0,
+            key_facts_found=0, key_facts_total=0, evidence_run=0, evidence_total=0,
+            started="2026-01-01T00:00:00+00:00", ended="2026-01-01T00:01:00+00:00",
+            wall_seconds=60.0,
+        )  # fmt: skip
+
+    (group,) = summarise([rec("step_budget"), rec("report"), rec("step_budget")])
+    assert group.out_of_steps == 2
+
+
+def test_cli_batch_table_shows_out_of_steps(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["batch", str(SCENARIOS[0]), "--scripted", "--out", str(tmp_path)])
+    header = [line for line in capsys.readouterr().out.splitlines() if line.startswith("scenario")]
+    assert "no report" in header[0]

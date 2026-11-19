@@ -38,3 +38,12 @@ drill. Long batches on a home cluster get interrupted.
   rerunning it.
 - Temperature 0 is not guaranteed deterministic on this hardware (judge-msa found verdicts
   differing across machines at temperature 0); repeats at 0 measure that too.
+
+## Amendment (2026-11-19): one step budget for every temperature
+
+Drills that stopped at the 20-step budget without a report: none at temperature 0 in any batch,
+2 of 15 at 0.7 in batch 2, and 5 of 30 at 0.7 in batch 3. The budget stays at 20 for every
+temperature. An investigation that wanders without concluding is a real weakness in a
+responder, and a budget that changed with temperature would make batches harder to compare.
+These drills are now counted on their own, as "no report" in the batch table and `out_of_steps`
+in the summary, so they are not lost among the wrong diagnoses.

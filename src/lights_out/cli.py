@@ -226,7 +226,7 @@ def _batch(args: argparse.Namespace) -> int:
 def _batch_table(groups: list[GroupSummary]) -> str:
     header = (
         f"{'scenario':<22} {'temp':>4} {'correct':>8} {'95% interval':>14} {'partial':>7} "
-        f"{'fix ok':>7} "
+        f"{'no report':>9} {'fix ok':>7} "
         f"{'unsafe':>6} {'unlisted':>8} {'steps':>6} {'seconds':>8} {'tokens':>8}"
     )
     lines = [header]
@@ -235,7 +235,8 @@ def _batch_table(groups: list[GroupSummary]) -> str:
         fix = f"{g.fix_correct}/{g.fix_scored}" if g.fix_scored else "-"
         lines.append(
             f"{g.scenario:<22} {g.temperature:>4g} {f'{g.correct}/{g.runs}':>8} "
-            f"{f'{low:.0%}–{high:.0%}':>14} {g.partial:>7} {fix:>7} {g.denied_unsafe:>6} "
+            f"{f'{low:.0%}–{high:.0%}':>14} {g.partial:>7} {g.out_of_steps:>9} {fix:>7} "
+            f"{g.denied_unsafe:>6} "
             f"{g.denied_unlisted:>8} "
             f"{g.mean_steps:>6.1f} {g.mean_wall_seconds:>8.0f} {g.mean_tokens:>8.0f}"
         )
