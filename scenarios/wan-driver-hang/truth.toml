@@ -13,6 +13,8 @@
 # reload (the cap is reached and reloads do not touch the driver), and blaming the provider.
 
 category = "hardware"
+# A hung WAN driver is a hardware fault and a WAN outage; either area is right (from batch 3).
+other_categories = ["wan"]
 host = "gw.lan"
 component = ["wan_nic_driver"]
 # Used only to score reports from before the component was a closed list (ADR 0012).

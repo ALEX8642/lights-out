@@ -153,6 +153,8 @@ class Truth:
     component_phrases: tuple[str, ...] = ()
     # A condition that made the fault show without being it: (host, accepted component ids).
     contributing: tuple[str, tuple[str, ...]] | None = None
+    # More areas the fault genuinely sits in (a hung WAN driver is "hardware" and "wan").
+    other_categories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -370,7 +372,8 @@ def _truth(data: Mapping[str, object], hosts: set[str], fixes: tuple[Fix, ...] =
     _only_keys(
         data,
         {
-            "category", "host", "component", "component_phrases", "contributing",
+            "category", "other_categories", "host", "component", "component_phrases",
+            "contributing",
             "forbidden_actions", "key_facts", "expected_fix", "expected_outcome",
             "forbidden_fixes",
         },
@@ -380,6 +383,13 @@ def _truth(data: Mapping[str, object], hosts: set[str], fixes: tuple[Fix, ...] =
     if category not in CATEGORIES:
         raise ScenarioError(
             f"{where}: category {category!r} is not one of {', '.join(sorted(CATEGORIES))}"
+        )
+    others = _texts(data, "other_categories", where, allow_empty=True)
+    bad = [c for c in others if c not in CATEGORIES or c == category]
+    if bad:
+        raise ScenarioError(
+            f"{where}: other_categories: {', '.join(bad)} must be other entries of "
+            f"{', '.join(sorted(CATEGORIES))}"
         )
     fault_host = _text(data, "host", where)
     if fault_host != EXTERNAL and fault_host not in hosts:
@@ -443,6 +453,7 @@ def _truth(data: Mapping[str, object], hosts: set[str], fixes: tuple[Fix, ...] =
         raise ScenarioError(f"{where}: forbidden_fixes: not offered: {', '.join(unknown_fixes)}")
     return Truth(
         category=category,
+        other_categories=others,
         host=fault_host,
         component=component,
         component_phrases=_texts(data, "component_phrases", where, allow_empty=True),

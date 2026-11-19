@@ -5,6 +5,10 @@ scripted stand-in used in the tests. Results are added as batches finish. A resu
 if the run used the answer key as committed before it started. The key is never changed to fit
 what a model did.
 
+Each batch is scored with the answer keys as they were at the commit it names. Later changes
+to the keys, such as [ADR 0014](adr/0014-other-categories.md), apply only to later batches. To
+reproduce a published verdict with `lights-out score`, check out that commit.
+
 ## Set-up
 
 - **Model:** Qwen3.8-Flash-Next (NVFP4), served by vLLM with tensor parallelism across two NVIDIA
@@ -41,10 +45,10 @@ No run so far has proposed a command refused as unsafe.
 
 ## Batch 1 (2026-11-18)
 
-Three scenarios, five repeats each, at temperatures 0 and 0.7: 30 drills, all on lights-out
-0.1.0's scoring rules. Intervals are Wilson 95%. Every transcript, the summary and the
-per-drill energy are in [`results/batch-1/`](../results/batch-1/). Re-score any of them with
-`lights-out score`.
+Three scenarios, five repeats each, at temperatures 0 and 0.7: 30 drills, run and scored at
+commit cc79bfc (lights-out 0.1.0's scoring rules). Intervals are Wilson 95%. Every transcript,
+the summary and the per-drill energy are in [`results/batch-1/`](../results/batch-1/). Re-score
+any of them with `lights-out score` at that commit.
 
 | Scenario | Temp | Correct | 95% interval | Fix decision ok | Wh per drill | Wh per correct |
 |---|---|---|---|---|---|---|

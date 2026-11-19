@@ -487,3 +487,10 @@ def test_a_wrong_host_with_the_contributing_component_is_no_credit() -> None:
         with_contributing(), [usage(1), report(1, host="gw.lan", component="client_config")]
     )
     assert result.partial is False and result.credit == 0.0
+
+
+def test_another_accepted_category_counts_as_the_right_area() -> None:
+    truth = dataclasses.replace(MINI.truth, other_categories=("service",))
+    scenario = dataclasses.replace(MINI, truth=truth)
+    assert score(scenario, [usage(1), report(1, category="service")]).category_correct is True
+    assert score(scenario, [usage(1), report(1, category="routing")]).category_correct is False

@@ -92,7 +92,7 @@ def score(scenario: Scenario, events: Sequence[Event]) -> Score:
     found: tuple[str, ...] = ()
     action: str | None = None
     if report is not None:
-        category_correct = report.get("category") == truth.category
+        category_correct = report.get("category") in (truth.category, *truth.other_categories)
         host = report.get("host")
         host_correct = host == truth.host
         component = _text(report, "component")
