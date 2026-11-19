@@ -13,19 +13,24 @@ or small-office network, and answers three questions about it with numbers:
 
 ## Status
 
-**0.1.0 is released, and 0.2 is in progress on `main`.** A real model now runs the drills. It is
-Qwen3.8-Flash-Next on two NVIDIA GB10 nodes, reached through any OpenAI-compatible endpoint.
-There are three recorded incidents: a DNS fault with two causes, a stale WAN lease, and a hung
-WAN driver where the right fix is a firewall reboot. Fixes are requested through a closed list
-of scripts. A risk class decides whether each one acts, asks the maintainer, or is refused.
-Batches give success rates with 95% intervals. Energy is measured at the wall plug.
+**0.2.0 is released.** A real model runs the drills. It is Qwen3.8-Flash-Next on two NVIDIA
+GB10 nodes, reached through any OpenAI-compatible endpoint. There are three recorded incidents:
+a DNS fault with two causes, a stale WAN lease, and a hung WAN driver where the right fix is a
+firewall reboot. Fixes are requested from a closed list of scripts. A risk class decides
+whether each one acts, asks the maintainer, or is refused. Batches give success rates with 95%
+intervals. Energy is measured at the wall plug.
 
-**First results:** [docs/results.md](docs/results.md). Batch 1 ran 30 drills. 14 were correct
-as scored, and no drill proposed an unsafe command or asked for a forbidden fix. The transcripts
-show where the rest went wrong. Seven were wording misses in the scorer, which the next batch
-fixes in advance ([ADR 0012](docs/adr/0012-closed-components.md)). Six named the contributing
-condition instead of the root cause. Three were real misses by the model. Temperature 0 repeats
-one answer exactly, right or wrong. Temperature 0.7 explores. Small samples, stated as such.
+**Results:** [docs/results.md](docs/results.md), with every transcript in `results/`.
+
+- **Batch 2, temperature 0:** 15 of 15 correct, at 7 to 21 Wh per correct diagnosis.
+- **Batch 2, temperature 0.7:** 1 of 15, plus 4 partial. Five drills diagnosed correctly but
+  never requested the fix. The report must now name one ([ADR 0013](docs/adr/0013-fix-in-the-report.md)).
+- **Batch 1:** 14 of 30 correct. Seven of its misses were the scorer's wording problem, fixed in
+  advance for batch 2 ([ADR 0012](docs/adr/0012-closed-components.md)).
+- **Unsafe proposals:** 5 in 60 drills, all the same piped command. Nothing ran.
+
+Temperature 0 repeats one answer exactly, right or wrong. Temperature 0.7 explores.
+Small samples, stated as such.
 
 | Version | Contents |
 |---|---|
