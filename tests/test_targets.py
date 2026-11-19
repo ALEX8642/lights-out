@@ -373,3 +373,23 @@ def test_ls_recursive_lists_every_directory_below() -> None:
     assert closed(*FILES).run("mon.lan", ("ls", "-lR", "/etc")).stdout == (
         "/etc:\nhosts\nunbound\n\n/etc/unbound:\nunbound.conf\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("argv", "stdout"),
+    [
+        (("grep", "-n", "-A", "1", "forward-zone", "/etc/unbound/unbound.conf"),
+         "4:forward-zone:\n5-  name: lan\n"),
+        (("grep", "-A1", "forward-zone", "/etc/unbound/unbound.conf"),
+         "forward-zone:\n  name: lan\n"),
+        (("grep", "-B", "1", "private", "/etc/unbound/unbound.conf"),
+         "  interface: 10.20.0.1\n  private-address: 10.0.0.0/8\n"),
+        (("grep", "-C", "0", "-E", "interface|name", "/etc/unbound/unbound.conf"),
+         "  interface: 10.20.0.1\n--\n  name: lan\n"),
+        (("grep", "-n", "-e", "private-address", "/etc/unbound/unbound.conf"),
+         "3:  private-address: 10.0.0.0/8\n"),
+    ],
+)  # fmt: skip
+def test_grep_context_and_e_are_computed(argv: tuple[str, ...], stdout: str) -> None:
+    result = closed(*FILES).run("mon.lan", argv)
+    assert (result.exit_code, result.stdout, result.matched) == (0, stdout, "derived")

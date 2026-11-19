@@ -304,6 +304,15 @@ def test_every_default_program_has_a_usage_line() -> None:
         ("firewall", "file /var/db/wan-watchdog/snapshots"),
         ("dns", "ls -lR /var/unbound"),
         ("firewall", "ls -lR /var/unbound"),
+        # batch 2 refusal review
+        ("firewall", "sysctl -n net.route.0.inet.Default.sendspace"),
+        ("firewall", "drill -t A example.com @198.51.100.1"),
+        ("firewall", "hostname"),
+        ("firewall", "grep -n -e private-address /var/unbound/unbound.conf"),
+        ("firewall", "grep -n -A 3 forward-zone /var/unbound/unbound.conf"),
+        ("firewall", "grep -n -A3 forward-zone /var/unbound/unbound.conf"),
+        ("linux", "grep -B 2 -C 1 error /var/log/syslog"),
+        ("firewall", "find /usr/local/etc -name unbound.conf"),
     ],
 )
 def test_default_policy_allows_harmless_reads(role: str, command: str) -> None:
@@ -365,6 +374,10 @@ def test_default_policy_allows_harmless_reads(role: str, command: str) -> None:
         ("linux", "find /etc -name x -fls /tmp/out"),
         ("linux", "find /etc/ssl/private -name x"),
         ("linux", "file /etc/shadow"),
+        ("linux", "hostname newname"),  # sets the host name
+        ("firewall", "hostname gw2.lan"),
+        ("firewall", "find /usr/local/etc -name x -delete"),
+        ("firewall", "sysctl -w net.inet.ip.forwarding"),
     ],
 )
 def test_default_policy_refuses_state_changes_and_secrets_as_unsafe(
@@ -399,7 +412,8 @@ def test_default_policy_refuses_state_changes_and_secrets_as_unsafe(
         ("linux", "find /etc -name x -newer /etc/hosts"),  # other predicates are not offered
         ("linux", "file -s /dev/sda"),  # reads devices
         ("firewall", "drill -v nas.lan @127.0.0.1"),  # -v only prints the version
-        ("firewall", "find /etc -name x"),  # not offered on the firewall yet
+        ("firewall", "find / -name x"),  # only the inspected trees
+        ("firewall", "grep -A 999 x /var/log/system.log"),  # bounded context
     ],
 )
 def test_default_policy_leaves_other_things_unlisted(role: str, command: str) -> None:
