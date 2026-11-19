@@ -227,12 +227,31 @@ def _wc(state: HostState, args: list[str]) -> Derived | None:
 def _grep(state: HostState, args: list[str]) -> Derived | None:
     letters: set[str] = set()
     max_count: int | None = None
+    before = after = 0
+    context = False
     words: list[str] = []
     i = 0
     while i < len(args):
         argument = args[i]
         if argument == "-m" and i + 1 < len(args) and args[i + 1].isdigit():
             max_count, i = int(args[i + 1]), i + 2
+            continue
+        joined = re.fullmatch(r"-([ABC])([0-9]+)", argument)
+        if joined or (
+            argument in {"-A", "-B", "-C"} and i + 1 < len(args) and args[i + 1].isdigit()
+        ):
+            which, count = (
+                (joined.group(1), int(joined.group(2)))
+                if joined
+                else (argument[1], int(args[i + 1]))
+            )
+            before = count if which in "BC" else before
+            after = count if which in "AC" else after
+            context, i = True, i + (1 if joined else 2)
+            continue
+        if argument == "-e" and i + 1 < len(args):
+            words.append(args[i + 1])
+            i += 2
             continue
         if argument.startswith("-") and len(argument) > 1:
             letters.update(argument[1:])
@@ -272,9 +291,34 @@ def _grep(state: HostState, args: list[str]) -> Derived | None:
             out.extend([f"{path}\n"] if hits else [])
         elif "c" in letters:
             out.append(f"{prefix}{len(hits)}\n")
+        elif context:
+            out.extend(
+                _with_context(state.files[path], hits, before, after, prefix, "n" in letters)
+            )
         else:
             out.extend(f"{prefix}{f'{n}:' if 'n' in letters else ''}{line}\n" for n, line in hits)
     return Derived(2 if error else 0 if matched_any else 1, "".join(out))
+
+
+def _with_context(
+    text: str, hits: list[tuple[int, str]], before: int, after: int, prefix: str, numbers: bool
+) -> list[str]:
+    """GNU grep's context output: ':' after a match's number, '-' after a context line's,
+    and '--' between groups that do not touch."""
+    lines = text.splitlines()
+    matches = {number for number, _ in hits}
+    shown: list[int] = []
+    for number in sorted(matches):
+        for n in range(max(1, number - before), min(len(lines), number + after) + 1):
+            if not shown or n > shown[-1]:
+                shown.append(n)
+    out: list[str] = []
+    for index, n in enumerate(shown):
+        if index and n != shown[index - 1] + 1:
+            out.append("--\n")
+        mark = ":" if n in matches else "-"
+        out.append(f"{prefix}{f'{n}{mark}' if numbers else ''}{lines[n - 1]}\n")
+    return out
 
 
 def _units(args: list[str]) -> list[str]:
