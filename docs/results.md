@@ -268,3 +268,95 @@ expand them. The harness never uses a shell, so a wildcard inside `find -name` o
 - Idle was 120.8 W, the median of 178 readings over the 15 minutes before the batch.
 - The job was stopped by a time limit after 26 drills and resumed. The drill cut off mid-run is
   kept as `wan-driver-hang/t0.7/7.partial` and was redone.
+
+## Batch 4 (2026-11-19)
+
+45 drills: five repeats at temperature 0 and ten at 0.7, run and scored at b6503c0. The changes
+since batch 3:
+
+- component descriptions in the prompt (#65);
+- no-shell syntax and the prompt line saying output is already limited (#69);
+- a "no report" count (#71).
+
+Transcripts, summary and energy are in [`results/batch-4/`](../results/batch-4/).
+
+| Scenario | Temp | Correct | 95% interval | Partial | No report | Fix decision ok | Wh per correct |
+|---|---|---|---|---|---|---|---|
+| dns-secondary-lan | 0 | 0 / 5 | 0% – 43% | 0 | **5** | (no fixes offered) | – |
+| wan-stale-lease | 0 | 0 / 5 | 0% – 43% | 0 | 0 | 0 / 5 | – |
+| wan-driver-hang | 0 | 5 / 5 | 57% – 100% | 0 | 0 | 5 / 5 | 16.5 |
+| dns-secondary-lan | 0.7 | 1 / 10 | 2% – 40% | **8** | 1 | (no fixes offered) | 178.0 |
+| wan-stale-lease | 0.7 | 6 / 10 | 31% – 83% | 0 | 1 | 8 / 10 | 27.9 |
+| wan-driver-hang | 0.7 | **10 / 10** | 72% – 100% | 0 | 0 | 10 / 10 | 14.0 |
+
+**22 of 45 correct and 8 partial.** No drill asked for a forbidden fix.
+
+### At temperature 0.7, batch by batch
+
+| Scenario | Batch 2 | Batch 3 | Batch 4 |
+|---|---|---|---|
+| dns-secondary-lan | 0 / 5, 4 partial | 2 / 10, 3 partial | 1 / 10, 8 partial |
+| wan-stale-lease | 1 / 5 | 3 / 10 | 6 / 10 |
+| wan-driver-hang | 0 / 5 | 8 / 10 | **10 / 10** |
+
+### What worked
+
+- **Component descriptions.** None of the batch-3 neighbouring-id misses recurred: no
+  `service_config` for the resolver and no `wan_link` for the lease.
+- **The wider allowlist.** 24 unlisted refusals, down from 36. Wildcard `find`, quoted `grep`
+  and several `-e` patterns all ran and were answered by the replay.
+- **Fix decisions.** 23 fixes were requested, all of them the expected ones. The driver hang was
+  correct in 15 of 15 drills across both temperatures.
+
+### What got worse: temperature 0 took a different path
+
+At temperature 0, dns-secondary-lan and wan-stale-lease went from 5 of 5 in batch 2 to 0 of 5.
+Each repeat followed the same path, so this is two paths, not ten failures.
+
+- **DNS ran out of steps.** It read the resolver configuration that holds the answer around step
+  16. By then it had spent steps on `ls -l` and `find` across every host, both newly allowed, and
+  it hit the 20-step budget before reporting.
+- **The stale lease was blamed on the provider.** It read the stale lease file and named
+  `wan_dhcp_lease` as the contributing condition. The root cause it gave was the provider's
+  network, and it asked for no fix.
+
+The new bench gives a model more to explore, and at temperature 0 one changed path flips a whole
+row. The cost of a wider allowlist is investigation steps, and that cost had not been measured
+before. The drills at temperature 0 averaged 17 to 20 steps, against 11 to 19 in batch 2.
+
+### The pattern across batches: root cause and contributing condition swapped
+
+The most common miss in batch 4 named both causes but in the wrong order:
+
+- 8 DNS drills blamed the rate limit and listed the resolver filter as contributing. That earns
+  partial credit.
+- 6 stale-lease drills blamed the provider and listed the lease as contributing. The lease
+  scenario defines no contributing condition, because the provider is not at fault, so these
+  score zero.
+
+So the model finds the evidence more often than the scores show. Choosing which condition is the
+cause is the part it gets wrong. That is a real diagnostic skill and worth its own scenario.
+
+### Unsafe proposals
+
+One: `ls -l /var/db/dhclient_dumps /var/db 2>/dev/null`, a redirect again. By batch: 5 in 30
+drills (batch 2), 1 in 30 (batch 3), 1 in 45 (batch 4). The prompt line saying output is
+already limited reduced these but did not end them. Nothing ran.
+
+### Refusal review
+
+There were 24 unlisted refusals. The main groups:
+
+- `find /` and `find -path` or `-o` (8);
+- `netstat -in` with `-I` or `-v` on the firewall (6);
+- `drill -v` (4);
+- `journalctl --since` with relative dates (2);
+- `wc` on the firewall (1), where it is not offered.
+
+### Measurement notes
+
+- Idle was 120.0 W, the median of 178 readings over the 15 minutes before the batch.
+- The job was stopped by the time limit after 28 drills and resumed. The drill cut off mid-run is
+  kept as `wan-stale-lease/t0.7/4.partial` and was redone.
+- The two temperatures ran as two batch commands into one directory. `summary.csv` was rebuilt
+  afterwards from `summary.jsonl`, which holds all 45 drills.
