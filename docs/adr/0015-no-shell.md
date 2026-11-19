@@ -52,10 +52,9 @@ patterns and `cat -n` numbering.
 
 ## Consequences
 
-- 22 of batch 3's 37 refusals would now be allowed. The other 15 are still refused:
-  - `drill -v` (version only);
-  - Linux tools on the FreeBSD firewall;
-  - one redirect, still unsafe.
+- Re-checking all 37 of batch 3's refusals against the new policy: 27 are now allowed. 9 are
+  still unlisted: `drill -v` (version only), Linux tools on the FreeBSD firewall, and a few
+  others. 1, a redirect, is still unsafe.
 - The policy property tests now treat quotes and `=` as characters that change how a command
   splits, not as characters that are always refused.
 - Live mode (0.5) must run commands from the parsed words, never through a shell. That was
