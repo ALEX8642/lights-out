@@ -18,7 +18,10 @@ from lights_out.policy import (
 
 POLICY = Policy.from_toml(Path(__file__).resolve().parent.parent / "policies" / "default.toml")
 ROLES = sorted(POLICY.roles())
-SAFE_ALPHABET = "".join(c for c in string.printable if " " <= c <= "~" and c not in FORBIDDEN_CHARS)
+# Characters that cannot change how a command splits: no forbidden ones, no quotes, no "=".
+SAFE_ALPHABET = "".join(
+    c for c in string.printable if " " <= c <= "~" and c not in FORBIDDEN_CHARS | set("'\"=")
+)
 
 roles = st.sampled_from(ROLES)
 

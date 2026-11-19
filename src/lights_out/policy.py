@@ -15,6 +15,7 @@ The grammar is described in docs/adr/0007-policy-v2.md (which amends 0002).
 from __future__ import annotations
 
 import re
+import shlex
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -24,9 +25,15 @@ from typing import Literal
 MAX_COMMAND_LENGTH = 512
 # Characters that chain, redirect or substitute commands in a shell: refused as unsafe.
 INJECTION_CHARS = frozenset(";|&$`><()\\")
-# Characters this policy does not support (quoting, globs, assignments): refused as unlisted.
-UNSUPPORTED_CHARS = frozenset("[]{}*?~!#\"'=")
-FORBIDDEN_CHARS = INJECTION_CHARS | UNSUPPORTED_CHARS
+# Characters that mean something only to a shell, which the harness never uses: refused as
+# unlisted. Quotes are parsed as a shell would and removed. Wildcards are not refused here: an
+# argument containing one must match a program's pattern, and only patterns for arguments the
+# program itself reads as a pattern (find -name, grep) accept them (docs/adr/0015-no-shell.md).
+UNSUPPORTED_CHARS = frozenset("{}~!#")
+FORBIDDEN_CHARS = INJECTION_CHARS | UNSUPPORTED_CHARS  # always refused, wherever they appear
+NO_SHELL = (
+    "There is no shell here: ~, {}, ! and # mean nothing, and = is accepted only in --option=value"
+)
 DEFAULT_MAX_ARGS = 8
 _PROGRAM_NAME = re.compile(r"[a-z0-9_.-]+")
 
@@ -218,20 +225,22 @@ class Policy:
                 return Deny(f"forbidden character: {char}", "unsafe")
         if ".." in command:
             return Deny("path traversal", "unsafe")
-        argv = tuple(command.split())  # only spaces can be left to split on
+        try:
+            words = shlex.split(command)  # no backslash or $ can reach here: quotes only
+        except ValueError:
+            return Deny("unbalanced quote. Close every quote you open", "unlisted")
+        if not words:
+            return Deny("empty command", "unlisted")
+        argv = tuple(_split_long_options(words))
         program_name, arguments = argv[0], argv[1:]
-        # Unsafe intent is judged before unsupported syntax, so that quoting a dangerous
-        # command does not turn it into a merely unlisted one.
-        refused = self._unsafe.reason(program_name, [a.strip("'\"") for a in arguments])
+        # Unsafe intent is judged before unsupported syntax, so that an unusual spelling of a
+        # dangerous command does not turn it into a merely unlisted one.
+        refused = self._unsafe.reason(program_name, arguments)
         if refused is not None:
             return Deny(refused, "unsafe")
-        for char in command:
-            if char in UNSUPPORTED_CHARS:
-                return Deny(
-                    f"unsupported character: {char}. Use plain space-separated arguments, "
-                    "without quotes, wildcards or '='",
-                    "unlisted",
-                )
+        for char in "".join(argv):
+            if char in UNSUPPORTED_CHARS or char == "=":  # an = left after --option=value
+                return Deny(f"unsupported character: {char}. {NO_SHELL}", "unlisted")
         programs = self._roles.get(role)
         if programs is None:
             return Deny(f"unknown role: {role}", "unlisted")
@@ -245,6 +254,18 @@ class Policy:
         if program.accepts(arguments):
             return Allow(argv)
         return Deny(f"arguments not allowed for {program_name}. Usage: {program.usage}", "unlisted")
+
+
+def _split_long_options(words: Sequence[str]) -> list[str]:
+    """``--type=service`` becomes ``--type service``, which long-option parsers read the same."""
+    out: list[str] = []
+    for word in words:
+        if word.startswith("--") and "=" in word:
+            option, value = word.split("=", 1)
+            out.extend([option, value])
+        else:
+            out.append(word)
+    return out
 
 
 def _resolve(

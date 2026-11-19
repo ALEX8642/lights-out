@@ -8,7 +8,9 @@ from lights_out.policy import Allow, Deny, Policy, PolicyError
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT = Policy.from_toml(REPO / "policies" / "default.toml")
 LINUX_PROGRAMS = "cat, ip, ping, systemctl, uptime"
-PLAIN = "Use plain space-separated arguments, without quotes, wildcards or '='"
+NO_SHELL = (
+    "There is no shell here: ~, {}, ! and # mean nothing, and = is accepted only in --option=value"
+)
 
 
 @pytest.fixture
@@ -71,6 +73,24 @@ def policy() -> Policy:
 )
 def test_allows(policy: Policy, command: str, argv: tuple[str, ...]) -> None:
     assert policy.check("linux", command) == Allow(argv)
+
+
+@pytest.mark.parametrize(
+    ("command", "argv"),
+    [
+        ("ip addr 'show'", ("ip", "addr", "show")),
+        ('ip "addr" show', ("ip", "addr", "show")),
+    ],
+)
+def test_quotes_are_parsed_as_a_shell_would_and_removed(
+    policy: Policy, command: str, argv: tuple[str, ...]
+) -> None:
+    assert policy.check("linux", command) == Allow(argv)
+
+
+def test_a_quoted_dangerous_argument_is_still_unsafe(policy: Policy) -> None:
+    assert policy.check("linux", "rm -rf '/'").kind == "unsafe"  # type: ignore[union-attr]
+    assert policy.check("linux", "cat '/etc/shadow'").kind == "unsafe"  # type: ignore[union-attr]
 
 
 def test_a_role_can_extend_another(policy: Policy) -> None:
@@ -151,10 +171,12 @@ def test_protected_paths_apply_only_to_path_arguments(policy: Policy) -> None:
     [
         ("", "empty command"),
         ("   ", "empty command"),
-        ("ip addr 'show'", f"unsupported character: '. {PLAIN}"),
-        ('ip addr "show"', f'unsupported character: ". {PLAIN}'),
-        ("cat /etc/*", f"unsupported character: *. {PLAIN}"),
-        ("FOO=1 ip addr show", f"unsupported character: =. {PLAIN}"),
+        ("cat /etc/*", "arguments not allowed for cat. Usage: cat FILE"),  # no shell to expand it
+        ("FOO=1 ip addr show", f"unsupported character: =. {NO_SHELL}"),
+        ("cat ~/notes", f"unsupported character: ~. {NO_SHELL}"),
+        ("cat /etc/{a,b}", f"unsupported character: {{. {NO_SHELL}"),
+        ("ip addr show # all", f"unsupported character: #. {NO_SHELL}"),
+        ("ip addr 'show", "unbalanced quote. Close every quote you open"),
         ("ss -tulpn", f"program not allowed: ss. Allowed on linux hosts: {LINUX_PROGRAMS}"),
         (
             "/sbin/ip addr show",
@@ -320,6 +342,45 @@ def test_default_policy_allows_harmless_reads(role: str, command: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("role", "command", "argv"),
+    [
+        # batch 3 review: characters the program itself gives meaning to. argv is written
+        # as the words the program receives, separated by "|".
+        ("dns", "find /etc -name '*.conf'", "find|/etc|-name|*.conf"),
+        ("linux", 'find /var/log -name "*.log" -type f', "find|/var/log|-name|*.log|-type|f"),
+        ("firewall", "find /var/unbound -name *.conf", "find|/var/unbound|-name|*.conf"),
+        ("firewall", "find /var/db/wd -name snap?", "find|/var/db/wd|-name|snap?"),
+        ("firewall", "find /var -name 'unbound*'", "find|/var|-name|unbound*"),
+        (
+            "firewall",
+            "cat -n /var/db/wan-watchdog/cron.log",
+            "cat|-n|/var/db/wan-watchdog/cron.log",
+        ),
+        (
+            "firewall",
+            'grep -c -i "watchdog timeout" /var/log/messages',
+            "grep|-c|-i|watchdog timeout|/var/log/messages",
+        ),
+        (
+            "firewall",
+            "grep -n -e private -e local-zone -e domain /var/unbound/unbound.conf",
+            "grep|-n|-e|private|-e|local-zone|-e|domain|/var/unbound/unbound.conf",
+        ),
+        ("linux", "grep -E 'time.*out' /var/log/syslog", "grep|-E|time.*out|/var/log/syslog"),
+        (
+            "linux",
+            "systemctl list-units --type=service --all",
+            "systemctl|list-units|--type|service|--all",
+        ),
+    ],
+)
+def test_default_policy_accepts_quotes_wildcards_and_long_option_values(
+    role: str, command: str, argv: str
+) -> None:
+    assert DEFAULT.check(role, command) == Allow(tuple(argv.split("|")))
+
+
+@pytest.mark.parametrize(
     ("role", "command"),
     [
         ("linux", "systemctl restart unbound"),
@@ -378,6 +439,10 @@ def test_default_policy_allows_harmless_reads(role: str, command: str) -> None:
         ("firewall", "hostname gw2.lan"),
         ("firewall", "find /usr/local/etc -name x -delete"),
         ("firewall", "sysctl -w net.inet.ip.forwarding"),
+        ("linux", "find /etc -name '*' -delete"),
+        ("linux", "cat '/etc/shadow'"),
+        ("linux", "grep -E 'a|b' /var/log/syslog"),  # | is refused anywhere, quoted or not
+        ("linux", "find /etc -name '-delete'"),  # quoting does not hide an action
     ],
 )
 def test_default_policy_refuses_state_changes_and_secrets_as_unsafe(
@@ -414,6 +479,10 @@ def test_default_policy_refuses_state_changes_and_secrets_as_unsafe(
         ("firewall", "drill -v nas.lan @127.0.0.1"),  # -v only prints the version
         ("firewall", "find / -name x"),  # only the inspected trees
         ("firewall", "grep -A 999 x /var/log/system.log"),  # bounded context
+        ("linux", "cat /etc/*"),  # a wildcard only where the program reads it, not the shell
+        ("linux", "ls /etc/*.conf"),
+        ("linux", "find / -name '*'"),
+        ("linux", "grep -r 'x' /etc"),
     ],
 )
 def test_default_policy_leaves_other_things_unlisted(role: str, command: str) -> None:

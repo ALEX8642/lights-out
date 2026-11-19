@@ -17,6 +17,7 @@ Anything else returns None and stays unrecorded. See docs/adr/0008-replay-matchi
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -74,11 +75,19 @@ def _cat(state: HostState, args: list[str]) -> Derived | None:
     paths = _paths(args)
     if not paths:
         return None
-    out, code = [], 0
+    out, code, numbered = [], 0, 0
     for path in paths:
         key = path.rstrip("/") or "/"
         if key in state.files:
-            out.append(state.files[key])
+            body = state.files[key]
+            if "-n" in args:  # numbering runs on across files, as cat's does
+                lines = body.splitlines()
+                body = "".join(
+                    f"{number:6d}\t{line}\n"
+                    for number, line in enumerate(lines, start=numbered + 1)
+                )
+                numbered += len(lines)
+            out.append(body)
         elif state.is_dir(key):
             out.append(f"cat: {path}: Is a directory\n")
             code = 1
@@ -156,7 +165,8 @@ def _find(state: HostState, args: list[str]) -> Derived | None:
             for index in range(len(parts)):
                 candidate = top.rstrip("/") + "/" + "/".join(parts[: index + 1])
                 is_file = index == len(parts) - 1
-                if parts[index] != name or (limit is not None and index + 1 > limit):
+                matches = fnmatch.fnmatchcase(parts[index], name)
+                if not matches or (limit is not None and index + 1 > limit):
                     continue
                 if kind == "f" and not is_file or kind == "d" and is_file:
                     continue
@@ -230,6 +240,7 @@ def _grep(state: HostState, args: list[str]) -> Derived | None:
     before = after = 0
     context = False
     words: list[str] = []
+    given: list[str] = []  # patterns from -e
     i = 0
     while i < len(args):
         argument = args[i]
@@ -250,7 +261,7 @@ def _grep(state: HostState, args: list[str]) -> Derived | None:
             context, i = True, i + (1 if joined else 2)
             continue
         if argument == "-e" and i + 1 < len(args):
-            words.append(args[i + 1])
+            given.append(args[i + 1])
             i += 2
             continue
         if argument.startswith("-") and len(argument) > 1:
@@ -258,20 +269,13 @@ def _grep(state: HostState, args: list[str]) -> Derived | None:
         else:
             words.append(argument)
         i += 1
-    patterns = [w for w in words if not w.startswith("/")]
+    positional = [w for w in words if not w.startswith("/")]
     paths = [w for w in words if w.startswith("/")]
-    if len(patterns) != 1 or not paths:
+    patterns = given or positional
+    if not paths or not patterns or (given and positional) or (not given and len(positional) != 1):
         return None
     flags = re.IGNORECASE if "i" in letters else 0
-    text = patterns[0]
-    if "F" in letters:
-        text = re.escape(text)
-    if "w" in letters:
-        text = rf"\b(?:{text})\b"
-    try:
-        regex = re.compile(text, flags)
-    except re.error:
-        regex = re.compile(re.escape(patterns[0]), flags)
+    regex = re.compile("|".join(f"(?:{_grep_regex(p, letters)})" for p in patterns), flags)
     show_name = len(paths) > 1 and "h" not in letters or "H" in letters
     out, error, matched_any = [], False, False
     for path in paths:
@@ -298,6 +302,16 @@ def _grep(state: HostState, args: list[str]) -> Derived | None:
         else:
             out.extend(f"{prefix}{f'{n}:' if 'n' in letters else ''}{line}\n" for n, line in hits)
     return Derived(2 if error else 0 if matched_any else 1, "".join(out))
+
+
+def _grep_regex(pattern: str, letters: set[str]) -> str:
+    """One grep pattern as a Python regex; an invalid one is matched as plain text."""
+    text = re.escape(pattern) if "F" in letters else pattern
+    try:
+        re.compile(text)
+    except re.error:
+        text = re.escape(pattern)
+    return rf"\b(?:{text})\b" if "w" in letters else text
 
 
 def _with_context(
