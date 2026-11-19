@@ -27,7 +27,7 @@ from lights_out.scenario import (
     FixState,
     Scenario,
 )
-from lights_out.targets import Target
+from lights_out.targets import MAX_OUTPUT_CHARS, Target
 from lights_out.transcript import Transcript
 
 MAX_CALLS_PER_TURN = 8
@@ -337,7 +337,10 @@ def system_prompt(scenario: Scenario, policy: Policy) -> str:
         "of host allows, listed below. Arguments may be given in any order. There is no "
         "shell: no pipes, redirection or variables, and nothing expands wildcards, so use one "
         "only where the program reads it itself (find -name, grep patterns). Quotes group "
-        'words, as in grep "two words".\n\n'
+        'words, as in grep "two words". Output comes back as text, cut off after '
+        f"{MAX_OUTPUT_CHARS:,} characters with a note, and error messages are included, so "
+        "there is nothing to pipe or redirect. To see less, use the program's own options "
+        "(head -n, tail -n, grep -m).\n\n"
         f"{chr(10).join(menus)}\n\n"
         f"{fixes}"
         "A command that is not allowed returns DENIED with the reason. Choose a different "

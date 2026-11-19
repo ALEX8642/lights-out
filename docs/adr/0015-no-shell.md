@@ -47,6 +47,11 @@ Also in this review:
   still unsafe;
 - `cat -n` is allowed.
 
+The prompt also says why nothing needs piping. Output already comes back limited, cut off after
+8,000 characters with a note, and with error messages included. To see less, the model can use
+a program's own options (`head -n`, `tail -n`, `grep -m`). Both unsafe proposals so far were
+attempts at exactly this: `| head -30` and `2>/dev/null`.
+
 Replay answers `find -name` wildcards with `fnmatch`, several `-e` patterns, quoted multi-word
 patterns and `cat -n` numbering.
 
@@ -58,4 +63,5 @@ patterns and `cat -n` numbering.
 - The policy property tests now treat quotes and `=` as characters that change how a command
   splits, not as characters that are always refused.
 - Live mode (0.5) must run commands from the parsed words, never through a shell. That was
-  already the design, and this decision depends on it.
+  already the design, and this decision depends on it. Live mode must also return error output
+  with the output and apply the same limit, so that the prompt stays true.
