@@ -579,7 +579,7 @@ def fix(fix_id: str, call_id: str = "f1", **options: str) -> ToolCall:
 def test_the_harness_decides_what_happens_to_a_fix(
     tmp_path: Path, scenario: Scenario, fix_id: str, outcome: str, words: str
 ) -> None:
-    drill = Drill(tmp_path, [turn(fix(fix_id)), turn(report())], scenario=scenario)
+    drill = Drill(tmp_path, [turn(fix(fix_id)), turn(report(fix="none"))], scenario=scenario)
     assert drill.of("fix") == [
         {
             "id": fix_id,
@@ -595,11 +595,13 @@ def test_the_harness_decides_what_happens_to_a_fix(
 
 
 def test_options_default_to_the_first_allowed_value_and_are_recorded(tmp_path: Path) -> None:
-    drill = Drill(tmp_path, [turn(fix("resolver_reload")), turn(report())], scenario=with_fixes())
+    drill = Drill(
+        tmp_path, [turn(fix("resolver_reload")), turn(report(fix="none"))], scenario=with_fixes()
+    )
     assert drill.of("fix")[0]["options"] == {"mode": "dry-run"}
     drill2 = Drill(
         tmp_path / "2",
-        [turn(fix("resolver_reload", mode="apply")), turn(report())],
+        [turn(fix("resolver_reload", mode="apply")), turn(report(fix="none"))],
         scenario=with_fixes(),
     )
     assert drill2.of("fix")[0]["options"] == {"mode": "apply"}
@@ -620,7 +622,7 @@ def test_options_default_to_the_first_allowed_value_and_are_recorded(tmp_path: P
     ],
 )
 def test_malformed_fix_requests_are_tool_errors(tmp_path: Path, call: ToolCall, error: str) -> None:
-    drill = Drill(tmp_path, [turn(call), turn(report())], scenario=with_fixes())
+    drill = Drill(tmp_path, [turn(call), turn(report(fix="none"))], scenario=with_fixes())
     assert drill.result.tool_errors == 1
     assert error in drill.tool_replies()[0]
     assert drill.of("fix") == []
@@ -629,7 +631,11 @@ def test_malformed_fix_requests_are_tool_errors(tmp_path: Path, call: ToolCall, 
 def test_a_fix_can_be_requested_once_per_drill(tmp_path: Path) -> None:
     drill = Drill(
         tmp_path,
-        [turn(fix("resolver_reload", "a")), turn(fix("resolver_reload", "b")), turn(report())],
+        [
+            turn(fix("resolver_reload", "a")),
+            turn(fix("resolver_reload", "b")),
+            turn(report(fix="none")),
+        ],
         scenario=with_fixes(),
     )
     assert len(drill.of("fix")) == 1
@@ -670,3 +676,67 @@ def test_a_contributing_condition_is_recorded(tmp_path: Path) -> None:
     assert drill.result.report is not None
     assert drill.result.report.contributing == ("mon.lan", "client_config")
     assert drill.of("report")[0]["contributing"] == named
+
+
+# The report's fix field (docs/adr/0013-fix-in-the-report.md)
+
+
+def test_with_fixes_on_offer_the_report_must_name_a_fix_or_none() -> None:
+    (report_tool,) = [t for t in tools_for(with_fixes()) if t["function"]["name"] == "report"]  # type: ignore[index]
+    parameters = report_tool["function"]["parameters"]  # type: ignore[index]
+    assert parameters["properties"]["fix"]["enum"] == [
+        "resolver_reload", "gateway_reboot", "swap_router", "none",
+    ]  # fmt: skip
+    assert "fix" in parameters["required"]
+    (plain,) = [t for t in tools_for(MINI) if t["function"]["name"] == "report"]  # type: ignore[index]
+    assert "fix" not in plain["function"]["parameters"]["properties"]  # type: ignore[index]
+
+
+def test_a_fix_named_in_the_report_is_requested_before_the_drill_ends(tmp_path: Path) -> None:
+    drill = Drill(tmp_path, [turn(report(fix="resolver_reload"))], scenario=with_fixes())
+    (event,) = drill.of("fix")
+    assert (event["id"], event["outcome"], event["via"]) == ("resolver_reload", "acted", "report")
+    assert event["options"] == {"mode": "dry-run"}
+    assert drill.of("report")[0]["fix"] == "resolver_reload"
+    assert drill.kinds().index("fix") < drill.kinds().index("report")
+    assert drill.result.stop_reason == "report"
+
+
+def test_the_report_fix_follows_the_same_rules(tmp_path: Path) -> None:
+    drill = Drill(
+        tmp_path, [turn(report(fix="gateway_reboot"))], scenario=with_fixes(reload_failed=True)
+    )
+    assert drill.of("fix")[0]["outcome"] == "asked_no_answer"
+
+
+def test_none_in_the_report_requests_nothing(tmp_path: Path) -> None:
+    drill = Drill(tmp_path, [turn(report(fix="none"))], scenario=with_fixes())
+    assert drill.of("fix") == []
+
+
+def test_a_fix_already_requested_is_not_requested_again_by_the_report(tmp_path: Path) -> None:
+    drill = Drill(
+        tmp_path,
+        [turn(fix("resolver_reload")), turn(report(fix="resolver_reload"))],
+        scenario=with_fixes(),
+    )
+    assert len(drill.of("fix")) == 1 and "via" not in drill.of("fix")[0]
+    assert drill.result.tool_errors == 0
+
+
+@pytest.mark.parametrize(
+    ("value", "error"),
+    [
+        (None, "fix must be one of"),
+        ("format_disk", "fix must be one of"),
+        (3, "fix must be one of"),
+    ],
+)
+def test_a_report_without_a_valid_fix_is_a_tool_error(
+    tmp_path: Path, value: object, error: str
+) -> None:
+    bad = report() if value is None else report(fix=value)
+    drill = Drill(tmp_path, [turn(bad), turn(report(fix="none"))], scenario=with_fixes())
+    assert drill.result.tool_errors == 1
+    assert error in drill.tool_replies()[0]
+    assert drill.of("fix") == [] and len(drill.of("report")) == 1
