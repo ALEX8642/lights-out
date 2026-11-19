@@ -31,7 +31,7 @@ from lights_out.scenario import (
     Truth,
     load_scenario,
 )
-from lights_out.targets import CommandResult, ReplayTarget
+from lights_out.targets import MAX_OUTPUT_CHARS, CommandResult, ReplayTarget
 from lights_out.transcript import Event, Transcript, read_transcript
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -752,3 +752,10 @@ def test_the_prompt_describes_every_component() -> None:
 def test_the_report_tool_points_to_the_component_descriptions() -> None:
     schema = TOOLS[1]["function"]["parameters"]["properties"]  # type: ignore[index]
     assert "described in the instructions" in schema["component"]["description"]
+
+
+def test_the_prompt_says_output_is_already_limited_so_nothing_needs_piping() -> None:
+    prompt = system_prompt(MINI, POLICY)
+    assert f"cut off after {MAX_OUTPUT_CHARS:,} characters" in prompt
+    assert "error messages are included" in prompt
+    assert "nothing to pipe or redirect" in prompt

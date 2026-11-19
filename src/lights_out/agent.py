@@ -27,7 +27,7 @@ from lights_out.scenario import (
     FixState,
     Scenario,
 )
-from lights_out.targets import Target
+from lights_out.targets import MAX_OUTPUT_CHARS, Target
 from lights_out.transcript import Transcript
 
 MAX_CALLS_PER_TURN = 8
@@ -92,9 +92,9 @@ TOOLS: tuple[Mapping[str, object], ...] = (
         "function": {
             "name": "run",
             "description": (
-                "Run one read-only inspection command on a host. No shell: no pipes, "
-                "redirection, quotes or variables. Returns the exit code and output, or "
-                "DENIED with the reason if the command is not allowed."
+                "Run one read-only inspection command on a host. There is no shell: no pipes, "
+                "redirection or variables; quotes group words. Returns the exit code and "
+                "output, or DENIED with the reason if the command is not allowed."
             ),
             "parameters": {
                 "type": "object",
@@ -334,8 +334,13 @@ def system_prompt(scenario: Scenario, policy: Policy) -> str:
         "anything.\n\n"
         f"Hosts:\n{hosts}\n\n"
         "Use the run tool to inspect a host. Each command is checked against what that kind "
-        "of host allows, listed below. Arguments may be given in any order. Use plain "
-        "space-separated arguments: no pipes, redirection, quotes, wildcards or '='.\n\n"
+        "of host allows, listed below. Arguments may be given in any order. There is no "
+        "shell: no pipes, redirection or variables, and nothing expands wildcards, so use one "
+        "only where the program reads it itself (find -name, grep patterns). Quotes group "
+        'words, as in grep "two words". Output comes back as text, cut off after '
+        f"{MAX_OUTPUT_CHARS:,} characters with a note, and error messages are included, so "
+        "there is nothing to pipe or redirect. To see less, use the program's own options "
+        "(head -n, tail -n, grep -m).\n\n"
         f"{chr(10).join(menus)}\n\n"
         f"{fixes}"
         "A command that is not allowed returns DENIED with the reason. Choose a different "

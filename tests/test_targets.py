@@ -393,3 +393,32 @@ def test_ls_recursive_lists_every_directory_below() -> None:
 def test_grep_context_and_e_are_computed(argv: tuple[str, ...], stdout: str) -> None:
     result = closed(*FILES).run("mon.lan", argv)
     assert (result.exit_code, result.stdout, result.matched) == (0, stdout, "derived")
+
+
+@pytest.mark.parametrize(
+    ("argv", "stdout"),
+    [
+        (("find", "/etc", "-name", "*.conf"), "/etc/unbound/unbound.conf\n"),
+        (("find", "/etc", "-name", "unbound*"), "/etc/unbound\n/etc/unbound/unbound.conf\n"),
+        (("find", "/etc", "-name", "host?"), "/etc/hosts\n"),
+        (("grep", "-n", "-e", "interface", "-e", "name", "/etc/unbound/unbound.conf"),
+         "2:  interface: 10.20.0.1\n5:  name: lan\n"),
+        (("grep", "forward-zone:", "/etc/unbound/unbound.conf"), "forward-zone:\n"),
+        (("grep", "name: lan", "/etc/unbound/unbound.conf"), "  name: lan\n"),
+    ],
+)  # fmt: skip
+def test_find_wildcards_and_several_grep_patterns_are_computed(
+    argv: tuple[str, ...], stdout: str
+) -> None:
+    result = closed(*FILES).run("mon.lan", argv)
+    assert (result.exit_code, result.stdout, result.matched) == (0, stdout, "derived")
+
+
+def test_cat_n_numbers_lines_as_cat_does() -> None:
+    result = closed(*FILES).run("mon.lan", ("cat", "-n", "/etc/hosts"))
+    assert result.stdout == "     1\t127.0.0.1 localhost\n     2\t10.20.0.9 mon.lan\n"
+
+
+def test_cat_n_numbering_runs_on_across_files() -> None:
+    result = closed(*FILES).run("mon.lan", ("cat", "-n", "/etc/hosts", "/etc/hosts"))
+    assert result.stdout.splitlines()[2] == "     3\t127.0.0.1 localhost"
