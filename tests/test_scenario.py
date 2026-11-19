@@ -59,6 +59,7 @@ def test_exit_code_defaults_to_zero() -> None:
 def test_truth() -> None:
     truth = load_scenario(MINI).truth
     assert truth.category == "dns"
+    assert truth.other_categories == ()
     assert truth.host == "gw.lan"
     assert truth.component == ("dns_resolver_config",)
     assert truth.component_phrases == ("Secondary Resolver", "unbound")
@@ -454,4 +455,24 @@ def test_expected_fix_none_means_no_fix_should_be_requested(with_fixes: Path) ->
 def test_fix_answers_need_fixes(copy: Path) -> None:
     edit(copy / "truth.toml", lambda s: TRUTH_FIX + s)
     with pytest.raises(ScenarioError, match="expected_fix"):
+        load_scenario(copy)
+
+
+def test_other_categories_must_come_from_the_category_list(copy: Path) -> None:
+    edit(
+        copy / "truth.toml",
+        lambda s: s.replace('category = "dns"', 'category = "dns"\nother_categories = ["service"]'),
+    )
+    assert load_scenario(copy).truth.other_categories == ("service",)
+    edit(copy / "truth.toml", lambda s: s.replace('["service"]', '["gremlins"]'))
+    with pytest.raises(ScenarioError, match=r"other_categories.*gremlins"):
+        load_scenario(copy)
+
+
+def test_other_categories_may_not_repeat_the_category(copy: Path) -> None:
+    edit(
+        copy / "truth.toml",
+        lambda s: s.replace('category = "dns"', 'category = "dns"\nother_categories = ["dns"]'),
+    )
+    with pytest.raises(ScenarioError, match="other_categories"):
         load_scenario(copy)
